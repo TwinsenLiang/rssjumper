@@ -424,6 +424,20 @@ async function fetchRss(url) {
       if (cacheAge < CACHE_TTL) {
         const cachedData = fs.readFileSync(cacheFile, 'utf8');
         console.log(`缓存命中: ${url}, 剩余时间: ${Math.round((CACHE_TTL - cacheAge) / 1000)}秒`);
+
+        // 记录访问历史（缓存命中时也记录）
+        if (accessLog.has(url)) {
+          const record = accessLog.get(url);
+          record.count++;
+          record.lastAccess = now;
+        } else {
+          accessLog.set(url, {
+            count: 1,
+            firstAccess: now,
+            lastAccess: now
+          });
+        }
+
         return {
           data: cachedData,
           fromCache: true
@@ -493,15 +507,8 @@ async function fetchRss(url) {
 module.exports = async (req, res) => {
   // 设置CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  // 安全HTTP头
-  res.setHeader('X-Content-Type-Options', 'nosniff'); // 防止MIME类型嗅探
-  res.setHeader('X-Frame-Options', 'DENY'); // 防止点击劫持
-  res.setHeader('X-XSS-Protection', '1; mode=block'); // XSS防护
-  res.setHeader('Referrer-Policy', 'no-referrer'); // 不发送referrer信息
-  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'unsafe-inline'"); // 内容安全策略（允许内联样式）
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -520,7 +527,7 @@ module.exports = async (req, res) => {
     const password = url.searchParams.get('password');
 
     // 管理页面和API（需要密码）
-    if (url.pathname === '/admin' || password) {
+    if (password) {
       if (password !== PASSWORD) {
         res.status(403).json({ error: '密码错误' });
         return;
@@ -619,9 +626,22 @@ module.exports = async (req, res) => {
       }
 
       // GET请求 - 显示管理页面HTML
+      // 为管理页面设置宽松的CSP，允许加载Tailwind CSS
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self'");
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('X-XSS-Protection', '1; mode=block');
+      res.setHeader('Referrer-Policy', 'no-referrer');
       res.status(200).send(generateAdminHTML());
       return;
     }
+
+    // 安全HTTP头（用于RSS代理和首页）
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'unsafe-inline'");
 
     // RSS代理功能
     if (!targetUrl) {
