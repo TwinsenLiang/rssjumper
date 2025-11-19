@@ -397,16 +397,11 @@ loadAccessLog().catch(err => {
 module.exports = async (req, res) => {
   // 设置CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
-    return;
-  }
-
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: '只允许GET请求' });
     return;
   }
 
@@ -424,6 +419,12 @@ module.exports = async (req, res) => {
     // 【第1步】RSS代理功能 - 最高优先级
     // ==========================================
     if (targetUrl) {
+      // RSS代理只接受GET请求
+      if (req.method !== 'GET') {
+        res.status(405).json({ error: 'RSS代理只支持GET请求' });
+        return;
+      }
+
       console.log(`[请求] RSS代理: ${targetUrl}`);
 
       // 验证URL
@@ -719,6 +720,12 @@ module.exports = async (req, res) => {
     // ==========================================
     // 【第2步】首页显示
     // ==========================================
+    // 首页只接受GET请求
+    if (req.method !== 'GET') {
+      res.status(405).json({ error: '首页只支持GET请求' });
+      return;
+    }
+
     console.log(`[请求] 访问首页`);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
