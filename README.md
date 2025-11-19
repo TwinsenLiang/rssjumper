@@ -380,6 +380,14 @@ cp .env.example .env
 - `CACHE_TTL` - 缓存时长，单位毫秒（默认：900000，即15分钟）
 - `CACHE_DIR` - 缓存目录路径（默认：`/tmp/rssjumper-cache`）
 
+**GitHub Gist持久化存储（可选，推荐）：**
+- `GITHUB_TOKEN` - GitHub Personal Access Token（需要gist权限）
+- `GIST_ID` - 存储数据的Gist ID
+- `GIST_ACCESS_LOG_FILE` - 访问历史文件名（默认：rssjumper-access-log.json）
+- `GIST_BLACKLIST_FILE` - 黑名单文件名（默认：rssjumper-blacklist.json）
+
+**详细配置说明请查看：[GIST_SETUP.md](GIST_SETUP.md)**
+
 注意：`.env` 文件仅在本地开发时生效，Vercel部署需要在Dashboard中配置环境变量。
 
 ### 修改频率限制
@@ -427,6 +435,24 @@ RSSJumper使用文件系统缓存机制：
    - 缓存未过期时直接返回缓存内容（响应头 `X-RSSJumper-Cache: HIT`）
    - 缓存过期后重新获取并更新缓存（响应头 `X-RSSJumper-Cache: MISS`）
 5. **错误处理**: 如果源站无法访问，返回RSS格式的错误信息
+
+### 数据持久化说明
+
+**重要**：Vercel serverless函数的`/tmp`目录会在函数实例回收时清空，导致访问历史和黑名单丢失。
+
+**解决方案**：使用GitHub Gist永久存储数据
+
+- ✅ **永久保存**：数据存储在GitHub，不会丢失
+- ✅ **跨实例共享**：所有函数实例共享同一份数据
+- ✅ **完全免费**：GitHub Gist免费，API限额充足（5000次/小时）
+- ✅ **性能优化**：60秒防抖批量保存，避免频繁API调用
+
+**配置方法**：参见 [GIST_SETUP.md](GIST_SETUP.md) 详细教程
+
+**不配置的影响**：
+- 访问历史可能在函数冷启动后丢失（低流量时更频繁）
+- 黑名单可能丢失
+- RSS缓存不受影响（缓存文件会保留更久）
 
 ### 配置修改后如何生效
 

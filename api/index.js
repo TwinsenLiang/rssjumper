@@ -3,40 +3,105 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// 内存存储（注意：Vercel无服务器环境会定期清空）
+// 内存存储
 const accessLog = new Map(); // 访问历史：url -> {count, lastAccess, firstAccess}
 const rateLimitMap = new Map(); // IP访问频率记录
 const blacklist = new Set(); // 黑名单URL列表
 
 // 配置
-const PASSWORD = process.env.PASSWORD || 'fUgvef-fofzu7-pifjic'; // 请修改为您的密码，建议使用环境变量
-const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 2; // 每分钟最多访问次数，建议使用环境变量
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1分钟
-const CACHE_TTL = parseInt(process.env.CACHE_TTL) || 15 * 60 * 1000; // 15分钟缓存，建议使用环境变量
-const CACHE_DIR = process.env.CACHE_DIR || '/tmp/rssjumper-cache'; // 缓存目录
-const DATA_DIR = '/tmp/rssjumper-data'; // 持久化数据目录
-const ACCESS_LOG_FILE = path.join(DATA_DIR, 'access-log.json');
-const BLACKLIST_FILE = path.join(DATA_DIR, 'blacklist.json');
+const PASSWORD = process.env.PASSWORD || 'fUgvef-fofzu7-pifjic';
+const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 2;
+const RATE_LIMIT_WINDOW = 60 * 1000;
+const CACHE_TTL = parseInt(process.env.CACHE_TTL) || 15 * 60 * 1000;
+const CACHE_DIR = process.env.CACHE_DIR || '/tmp/rssjumper-cache';
 
-// 确保缓存和数据目录存在
+// GitHub Gist配置
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GIST_ID = process.env.GIST_ID;
+const GIST_ACCESS_LOG_FILE = process.env.GIST_ACCESS_LOG_FILE || 'rssjumper-access-log.json';
+const GIST_BLACKLIST_FILE = process.env.GIST_BLACKLIST_FILE || 'rssjumper-blacklist.json';
+
+// 数据更新防抖
+let saveTimer = null;
+let dataChanged = false;
+
+// 确保缓存目录存在
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+
+/**
+ * 从GitHub Gist读取文件内容
+ */
+async function readGistFile(filename) {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    console.log('GitHub Gist未配置，跳过远程加载');
+    return null;
+  }
+
+  try {
+    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      timeout: 10000
+    });
+
+    const file = response.data.files[filename];
+    if (file && file.content) {
+      return JSON.parse(file.content);
+    }
+    return null;
+  } catch (error) {
+    console.error(`读取Gist文件 ${filename} 失败:`, error.message);
+    return null;
+  }
 }
 
 /**
- * 从文件加载访问历史
+ * 更新GitHub Gist文件内容
  */
-function loadAccessLog() {
+async function updateGistFile(filename, content) {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    return;
+  }
+
   try {
-    if (fs.existsSync(ACCESS_LOG_FILE)) {
-      const data = JSON.parse(fs.readFileSync(ACCESS_LOG_FILE, 'utf8'));
+    await axios.patch(
+      `https://api.github.com/gists/${GIST_ID}`,
+      {
+        files: {
+          [filename]: {
+            content: JSON.stringify(content, null, 2)
+          }
+        }
+      },
+      {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 10000
+      }
+    );
+    console.log(`已同步 ${filename} 到Gist`);
+  } catch (error) {
+    console.error(`更新Gist文件 ${filename} 失败:`, error.message);
+  }
+}
+
+/**
+ * 从GitHub Gist加载访问历史
+ */
+async function loadAccessLog() {
+  try {
+    const data = await readGistFile(GIST_ACCESS_LOG_FILE);
+    if (data) {
       Object.entries(data).forEach(([url, record]) => {
         accessLog.set(url, record);
       });
-      console.log(`已加载 ${accessLog.size} 条访问历史`);
+      console.log(`已从Gist加载 ${accessLog.size} 条访问历史`);
     }
   } catch (error) {
     console.error('加载访问历史失败:', error.message);
@@ -44,26 +109,42 @@ function loadAccessLog() {
 }
 
 /**
- * 保存访问历史到文件
+ * 保存访问历史到GitHub Gist（防抖）
  */
 function saveAccessLog() {
-  try {
-    const data = Object.fromEntries(accessLog);
-    fs.writeFileSync(ACCESS_LOG_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (error) {
-    console.error('保存访问历史失败:', error.message);
+  dataChanged = true;
+
+  // 清除旧定时器
+  if (saveTimer) {
+    clearTimeout(saveTimer);
   }
+
+  // 60秒后批量保存，避免频繁API调用
+  saveTimer = setTimeout(async () => {
+    if (dataChanged) {
+      const accessData = Object.fromEntries(accessLog);
+      const blacklistData = Array.from(blacklist);
+
+      // 同时更新两个文件
+      await Promise.all([
+        updateGistFile(GIST_ACCESS_LOG_FILE, accessData),
+        updateGistFile(GIST_BLACKLIST_FILE, blacklistData)
+      ]);
+
+      dataChanged = false;
+    }
+  }, 60000); // 60秒防抖
 }
 
 /**
- * 从文件加载黑名单
+ * 从GitHub Gist加载黑名单
  */
-function loadBlacklist() {
+async function loadBlacklist() {
   try {
-    if (fs.existsSync(BLACKLIST_FILE)) {
-      const data = JSON.parse(fs.readFileSync(BLACKLIST_FILE, 'utf8'));
+    const data = await readGistFile(GIST_BLACKLIST_FILE);
+    if (data && Array.isArray(data)) {
       data.forEach(url => blacklist.add(url));
-      console.log(`已加载 ${blacklist.size} 条黑名单`);
+      console.log(`已从Gist加载 ${blacklist.size} 条黑名单`);
     }
   } catch (error) {
     console.error('加载黑名单失败:', error.message);
@@ -71,20 +152,17 @@ function loadBlacklist() {
 }
 
 /**
- * 保存黑名单到文件
+ * 保存黑名单到GitHub Gist（立即保存，因为操作不频繁）
  */
-function saveBlacklist() {
-  try {
-    const data = Array.from(blacklist);
-    fs.writeFileSync(BLACKLIST_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (error) {
-    console.error('保存黑名单失败:', error.message);
-  }
+async function saveBlacklist() {
+  const data = Array.from(blacklist);
+  await updateGistFile(GIST_BLACKLIST_FILE, data);
 }
 
-// 启动时加载持久化数据
-loadAccessLog();
-loadBlacklist();
+// 启动时加载持久化数据（异步执行，不阻塞函数启动）
+(async () => {
+  await Promise.all([loadAccessLog(), loadBlacklist()]);
+})();
 
 /**
  * 生成URL的hash作为缓存文件名
@@ -415,19 +493,19 @@ module.exports = async (req, res) => {
       if (req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body);
 
             if (data.action === 'blacklist') {
               // 添加到黑名单
               blacklist.add(data.url);
-              saveBlacklist(); // 保存到文件
+              await saveBlacklist(); // 立即保存到Gist
               res.status(200).json({ success: true, message: 'URL已加入黑名单' });
             } else if (data.action === 'unblacklist') {
               // 从黑名单移除
               blacklist.delete(data.url);
-              saveBlacklist(); // 保存到文件
+              await saveBlacklist(); // 立即保存到Gist
               res.status(200).json({ success: true, message: 'URL已从黑名单移除' });
             } else if (data.action === 'clearCache') {
               // 清除缓存
