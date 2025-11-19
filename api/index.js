@@ -14,11 +14,77 @@ const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 2; // 每分钟最多访�
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1分钟
 const CACHE_TTL = parseInt(process.env.CACHE_TTL) || 15 * 60 * 1000; // 15分钟缓存，建议使用环境变量
 const CACHE_DIR = process.env.CACHE_DIR || '/tmp/rssjumper-cache'; // 缓存目录
+const DATA_DIR = '/tmp/rssjumper-data'; // 持久化数据目录
+const ACCESS_LOG_FILE = path.join(DATA_DIR, 'access-log.json');
+const BLACKLIST_FILE = path.join(DATA_DIR, 'blacklist.json');
 
-// 确保缓存目录存在
+// 确保缓存和数据目录存在
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+/**
+ * 从文件加载访问历史
+ */
+function loadAccessLog() {
+  try {
+    if (fs.existsSync(ACCESS_LOG_FILE)) {
+      const data = JSON.parse(fs.readFileSync(ACCESS_LOG_FILE, 'utf8'));
+      Object.entries(data).forEach(([url, record]) => {
+        accessLog.set(url, record);
+      });
+      console.log(`已加载 ${accessLog.size} 条访问历史`);
+    }
+  } catch (error) {
+    console.error('加载访问历史失败:', error.message);
+  }
+}
+
+/**
+ * 保存访问历史到文件
+ */
+function saveAccessLog() {
+  try {
+    const data = Object.fromEntries(accessLog);
+    fs.writeFileSync(ACCESS_LOG_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (error) {
+    console.error('保存访问历史失败:', error.message);
+  }
+}
+
+/**
+ * 从文件加载黑名单
+ */
+function loadBlacklist() {
+  try {
+    if (fs.existsSync(BLACKLIST_FILE)) {
+      const data = JSON.parse(fs.readFileSync(BLACKLIST_FILE, 'utf8'));
+      data.forEach(url => blacklist.add(url));
+      console.log(`已加载 ${blacklist.size} 条黑名单`);
+    }
+  } catch (error) {
+    console.error('加载黑名单失败:', error.message);
+  }
+}
+
+/**
+ * 保存黑名单到文件
+ */
+function saveBlacklist() {
+  try {
+    const data = Array.from(blacklist);
+    fs.writeFileSync(BLACKLIST_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (error) {
+    console.error('保存黑名单失败:', error.message);
+  }
+}
+
+// 启动时加载持久化数据
+loadAccessLog();
+loadBlacklist();
 
 /**
  * 生成URL的hash作为缓存文件名
@@ -186,6 +252,7 @@ async function fetchRss(url) {
             lastAccess: now
           });
         }
+        saveAccessLog(); // 保存到文件
 
         return {
           data: cachedData,
@@ -240,6 +307,7 @@ async function fetchRss(url) {
         lastAccess: now
       });
     }
+    saveAccessLog(); // 保存到文件
 
     return {
       data: response.data,
@@ -354,10 +422,12 @@ module.exports = async (req, res) => {
             if (data.action === 'blacklist') {
               // 添加到黑名单
               blacklist.add(data.url);
+              saveBlacklist(); // 保存到文件
               res.status(200).json({ success: true, message: 'URL已加入黑名单' });
             } else if (data.action === 'unblacklist') {
               // 从黑名单移除
               blacklist.delete(data.url);
+              saveBlacklist(); // 保存到文件
               res.status(200).json({ success: true, message: 'URL已从黑名单移除' });
             } else if (data.action === 'clearCache') {
               // 清除缓存
