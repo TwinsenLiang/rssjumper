@@ -530,6 +530,13 @@ module.exports = async (req, res) => {
         return;
       }
 
+      // 为管理页面设置宽松的CSP，允许加载Tailwind CSS和内联脚本
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'unsafe-hashes' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self'; img-src 'self' data:; font-src 'self' data:");
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      res.setHeader('X-XSS-Protection', '1; mode=block');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+
       // 处理POST请求（管理操作）
       if (req.method === 'POST') {
         let body = '';
@@ -623,12 +630,6 @@ module.exports = async (req, res) => {
       }
 
       // GET请求 - 显示管理页面HTML
-      // 为管理页面设置宽松的CSP，允许加载Tailwind CSS
-      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self'");
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('X-Frame-Options', 'DENY');
-      res.setHeader('X-XSS-Protection', '1; mode=block');
-      res.setHeader('Referrer-Policy', 'no-referrer');
       res.status(200).send(generateAdminHTML());
       return;
     }
