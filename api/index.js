@@ -531,6 +531,7 @@ async function readRSSCacheFromGist(targetUrl) {
       console.log(`[Gist缓存] 命中！剩余时间: ${Math.round((cache.expiresAt - now) / 1000)}秒`);
       return {
         data: cache.content,
+        contentType: cache.contentType || 'application/xml; charset=utf-8', // 使用保存的Content-Type
         fromCache: true
       };
     } else {
@@ -546,7 +547,7 @@ async function readRSSCacheFromGist(targetUrl) {
 /**
  * 【第3步】将RSS缓存写入Gist
  */
-async function writeRSSCacheToGist(targetUrl, content) {
+async function writeRSSCacheToGist(targetUrl, content, contentType) {
   if (!GITHUB_TOKEN || !GIST_ID) {
     console.log('[Gist缓存] 未配置，跳过写入');
     return;
@@ -558,6 +559,7 @@ async function writeRSSCacheToGist(targetUrl, content) {
   const cacheData = {
     url: targetUrl,
     content: content,
+    contentType: contentType, // 保存原始Content-Type
     cachedAt: now,
     expiresAt: now + CACHE_TTL
   };
@@ -605,7 +607,7 @@ async function proxyRSS(targetUrl) {
     return {
       success: true,
       data: cachedResult.data,
-      contentType: 'application/xml; charset=utf-8',
+      contentType: cachedResult.contentType, // 使用缓存中保存的Content-Type
       fromCache: true
     };
   }
@@ -620,21 +622,25 @@ async function proxyRSS(targetUrl) {
       },
       maxRedirects: 5,
       validateStatus: (status) => status >= 200 && status < 400,
-      responseType: 'text',
-      responseEncoding: 'utf8'
+      responseType: 'text'
+      // 移除 responseEncoding，让axios自动处理编码，避免修改Content-Type
     });
 
     console.log(`[RSS代理] 抓取成功，大小: ${response.data.length} 字节`);
 
+    // 获取原始Content-Type（axios会将header名称转为小写）
+    const originalContentType = response.headers['content-type'] || 'application/xml; charset=utf-8';
+    console.log(`[RSS代理] Content-Type: ${originalContentType}`);
+
     // 【第3步】异步写入Gist缓存（不阻塞响应）
-    writeRSSCacheToGist(targetUrl, response.data).catch(err => {
+    writeRSSCacheToGist(targetUrl, response.data, originalContentType).catch(err => {
       console.log(`[Gist缓存] 异步写入失败: ${err.message}`);
     });
 
     return {
       success: true,
       data: response.data,
-      contentType: response.headers['content-type'] || 'application/xml; charset=utf-8',
+      contentType: originalContentType,
       fromCache: false
     };
   } catch (error) {
