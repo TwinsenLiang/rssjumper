@@ -185,7 +185,8 @@ async function getAccessLogFromGist() {
       url,
       count: record.count,
       firstAccess: new Date(record.firstAccess).toLocaleString('zh-CN'),
-      lastAccess: new Date(record.lastAccess).toLocaleString('zh-CN')
+      lastAccess: new Date(record.lastAccess).toLocaleString('zh-CN'),
+      blacklisted: blacklist.has(url) // 【第1步-B】添加黑名单状态
     }));
   } catch (error) {
     console.log(`[管理后台] 读取访问记录失败: ${error.message}`);
@@ -877,7 +878,7 @@ module.exports = async (req, res) => {
 
         // 更新访问记录表格
         const accessLogHtml = data.logs.length > 0 ?
-          '<table><thead><tr><th>RSS URL</th><th>访问次数</th><th>首次访问</th><th>最后访问</th></tr></thead><tbody>' +
+          '<table><thead><tr><th>RSS URL</th><th>访问次数</th><th>首次访问</th><th>最后访问</th><th>操作</th></tr></thead><tbody>' +
           data.logs.map(log => {
             const escapedUrl = escapeHtml(log.url);
             return '<tr>' +
@@ -885,6 +886,11 @@ module.exports = async (req, res) => {
               '<td>' + log.count + '</td>' +
               '<td>' + log.firstAccess + '</td>' +
               '<td>' + log.lastAccess + '</td>' +
+              '<td>' +
+                (log.blacklisted ?
+                  '<button class="action-btn unblock-btn" data-url="' + escapedUrl + '" onclick="toggleBlacklist(this.dataset.url, false)">解绑</button>' :
+                  '<button class="action-btn block-btn" data-url="' + escapedUrl + '" onclick="toggleBlacklist(this.dataset.url, true)">加黑</button>') +
+              '</td>' +
               '</tr>';
           }).join('') +
           '</tbody></table>' :
@@ -894,7 +900,7 @@ module.exports = async (req, res) => {
 
         // 更新缓存文件表格
         const cacheFilesHtml = data.cacheFiles.length > 0 ?
-          '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>过期时间</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+          '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>过期时间</th><th>状态</th></tr></thead><tbody>' +
           data.cacheFiles.map(file => {
             const escapedUrl = escapeHtml(file.url);
             return '<tr>' +
@@ -904,11 +910,6 @@ module.exports = async (req, res) => {
               '<td>' + file.expiresAt + '</td>' +
               '<td class="' + (file.expired ? 'expired' : 'valid') + '">' +
                 (file.expired ? '已过期' : '有效') +
-              '</td>' +
-              '<td>' +
-                (file.blacklisted ?
-                  '<button class="action-btn unblock-btn" data-url="' + escapedUrl + '" onclick="toggleBlacklist(this.dataset.url, false)">解绑</button>' :
-                  '<button class="action-btn block-btn" data-url="' + escapedUrl + '" onclick="toggleBlacklist(this.dataset.url, true)">加黑</button>') +
               '</td>' +
               '</tr>';
           }).join('') +
