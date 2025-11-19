@@ -849,6 +849,13 @@ module.exports = async (req, res) => {
   <script>
     const password = new URLSearchParams(window.location.search).get('password');
 
+    // HTML属性转义函数
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     async function loadData() {
       try {
         const response = await fetch('/?password=' + encodeURIComponent(password), {
@@ -871,14 +878,15 @@ module.exports = async (req, res) => {
         // 更新访问记录表格
         const accessLogHtml = data.logs.length > 0 ?
           '<table><thead><tr><th>RSS URL</th><th>访问次数</th><th>首次访问</th><th>最后访问</th></tr></thead><tbody>' +
-          data.logs.map(log =>
-            '<tr>' +
-            '<td class="url-cell" title="' + log.url + '">' + log.url + '</td>' +
-            '<td>' + log.count + '</td>' +
-            '<td>' + log.firstAccess + '</td>' +
-            '<td>' + log.lastAccess + '</td>' +
-            '</tr>'
-          ).join('') +
+          data.logs.map(log => {
+            const escapedUrl = escapeHtml(log.url);
+            return '<tr>' +
+              '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
+              '<td>' + log.count + '</td>' +
+              '<td>' + log.firstAccess + '</td>' +
+              '<td>' + log.lastAccess + '</td>' +
+              '</tr>';
+          }).join('') +
           '</tbody></table>' :
           '<div class="loading">暂无访问记录</div>';
 
@@ -887,22 +895,23 @@ module.exports = async (req, res) => {
         // 更新缓存文件表格
         const cacheFilesHtml = data.cacheFiles.length > 0 ?
           '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>过期时间</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
-          data.cacheFiles.map(file =>
-            '<tr>' +
-            '<td class="url-cell" title="' + file.url + '">' + file.url + '</td>' +
-            '<td>' + (file.size / 1024).toFixed(2) + ' KB</td>' +
-            '<td>' + file.cachedAt + '</td>' +
-            '<td>' + file.expiresAt + '</td>' +
-            '<td class="' + (file.expired ? 'expired' : 'valid') + '">' +
-              (file.expired ? '已过期' : '有效') +
-            '</td>' +
-            '<td>' +
-              (file.blacklisted ?
-                '<button class="action-btn unblock-btn" onclick="toggleBlacklist(\'' + file.url + '\', false)">解绑</button>' :
-                '<button class="action-btn block-btn" onclick="toggleBlacklist(\'' + file.url + '\', true)">加黑</button>') +
-            '</td>' +
-            '</tr>'
-          ).join('') +
+          data.cacheFiles.map(file => {
+            const escapedUrl = escapeHtml(file.url);
+            return '<tr>' +
+              '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
+              '<td>' + (file.size / 1024).toFixed(2) + ' KB</td>' +
+              '<td>' + file.cachedAt + '</td>' +
+              '<td>' + file.expiresAt + '</td>' +
+              '<td class="' + (file.expired ? 'expired' : 'valid') + '">' +
+                (file.expired ? '已过期' : '有效') +
+              '</td>' +
+              '<td>' +
+                (file.blacklisted ?
+                  '<button class="action-btn unblock-btn" data-url="' + escapedUrl + '" onclick="toggleBlacklist(this.dataset.url, false)">解绑</button>' :
+                  '<button class="action-btn block-btn" data-url="' + escapedUrl + '" onclick="toggleBlacklist(this.dataset.url, true)">加黑</button>') +
+              '</td>' +
+              '</tr>';
+          }).join('') +
           '</tbody></table>' :
           '<div class="loading">暂无缓存文件</div>';
 
