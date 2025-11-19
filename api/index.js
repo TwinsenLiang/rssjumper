@@ -275,7 +275,61 @@ module.exports = async (req, res) => {
     const targetUrl = url.searchParams.get('url');
     const password = url.searchParams.get('password');
 
-    // 管理页面和API（需要密码）
+    // 优先处理RSS代理请求
+    if (targetUrl) {
+      // 安全HTTP头（用于RSS代理）
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('X-XSS-Protection', '1; mode=block');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('Content-Security-Policy', "default-src 'self'");
+
+      // 验证URL格式
+      if (!isValidRssUrl(targetUrl)) {
+        res.status(400).json({ error: '无效的URL格式，只支持http/https协议的RSS源' });
+        return;
+      }
+
+      // 检查是否在黑名单中
+      if (blacklist.has(targetUrl)) {
+        const errorRSS = generateErrorRSS(targetUrl, '你访问的URL已被列入黑名单');
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('X-RSSJumper-Blacklisted', 'true');
+        res.status(200).send(errorRSS);
+        return;
+      }
+
+      // 检查访问频率
+      const clientIp = getClientIp(req);
+      if (!checkRateLimit(clientIp)) {
+        res.status(429).json({
+          error: '访问频率超限，请稍后再试',
+          limit: `${RATE_LIMIT}次/分钟`
+        });
+        return;
+      }
+
+      // 抓取RSS
+      let result;
+      try {
+        result = await fetchRss(targetUrl);
+      } catch (fetchError) {
+        console.error('RSS获取失败:', fetchError);
+        const errorRSS = generateErrorRSS(targetUrl, fetchError.message);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('X-RSSJumper-Error', 'true');
+        res.status(200).send(errorRSS);
+        return;
+      }
+
+      // 返回RSS内容
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('X-RSSJumper-Cache', result.fromCache ? 'HIT' : 'MISS');
+      res.status(200).send(result.data);
+      return;
+    }
+
+    // 管理页面和API（需要密码，且没有url参数）
     if (password) {
       if (password !== PASSWORD) {
         res.status(403).json({ error: '密码错误' });
@@ -449,50 +503,6 @@ module.exports = async (req, res) => {
       `);
       return;
     }
-
-    // 验证URL格式
-    if (!isValidRssUrl(targetUrl)) {
-      res.status(400).json({ error: '无效的URL格式，只支持http/https协议的RSS源' });
-      return;
-    }
-
-    // 检查是否在黑名单中
-    if (blacklist.has(targetUrl)) {
-      const errorRSS = generateErrorRSS(targetUrl, '你访问的URL已被列入黑名单');
-      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-      res.setHeader('X-RSSJumper-Blacklisted', 'true');
-      res.status(200).send(errorRSS);
-      return;
-    }
-
-    // 检查访问频率
-    const clientIp = getClientIp(req);
-    if (!checkRateLimit(clientIp)) {
-      res.status(429).json({
-        error: '访问频率超限，请稍后再试',
-        limit: `${RATE_LIMIT}次/分钟`
-      });
-      return;
-    }
-
-    // 抓取RSS
-    let result;
-    try {
-      result = await fetchRss(targetUrl);
-    } catch (fetchError) {
-      // 如果是RSS获取失败，返回RSS格式的错误信息
-      console.error('RSS获取失败:', fetchError);
-      const errorRSS = generateErrorRSS(targetUrl, fetchError.message);
-      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-      res.setHeader('X-RSSJumper-Error', 'true');
-      res.status(200).send(errorRSS);
-      return;
-    }
-
-    // 返回RSS内容（保持XML格式）
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.setHeader('X-RSSJumper-Cache', result.fromCache ? 'HIT' : 'MISS');
-    res.status(200).send(result.data);
 
   } catch (error) {
     console.error('Error:', error);
