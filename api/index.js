@@ -12,15 +12,67 @@ const RATE_LIMIT_WINDOW = 60 * 1000; // 1分钟
 const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
 
 /**
+ * 检查是否为内网地址（防止SSRF攻击）
+ */
+function isPrivateIP(hostname) {
+  // 检查是否为localhost
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return true;
+  }
+
+  // 检查是否为内网IP段
+  const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const match = hostname.match(ipv4Regex);
+
+  if (match) {
+    const [, a, b, c, d] = match.map(Number);
+
+    // 检查IP是否有效
+    if (a > 255 || b > 255 || c > 255 || d > 255) {
+      return true; // 无效IP视为内网
+    }
+
+    // 私有IP地址段
+    if (a === 10) return true; // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16
+    if (a === 127) return true; // 127.0.0.0/8 (loopback)
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 (link-local)
+    if (a === 0) return true; // 0.0.0.0/8
+    if (a >= 224) return true; // 224.0.0.0+ (multicast and reserved)
+  }
+
+  // 检查IPv6内网地址
+  if (hostname.includes(':')) {
+    const lowerHostname = hostname.toLowerCase();
+    if (lowerHostname.startsWith('fc') || lowerHostname.startsWith('fd')) {
+      return true; // fc00::/7 (unique local)
+    }
+    if (lowerHostname.startsWith('fe80')) {
+      return true; // fe80::/10 (link-local)
+    }
+  }
+
+  return false;
+}
+
+/**
  * 验证是否为有效的RSS URL
  */
 function isValidRssUrl(url) {
   try {
     const parsedUrl = new URL(url);
+
     // 只允许http/https协议
     if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
       return false;
     }
+
+    // 防止SSRF攻击：检查是否为内网地址
+    if (isPrivateIP(parsedUrl.hostname)) {
+      return false;
+    }
+
     // 简单验证是否可能是RSS源（检查文件扩展名）
     const pathname = parsedUrl.pathname.toLowerCase();
     if (pathname.includes('.xml') || pathname.includes('rss') || pathname.includes('feed')) {
@@ -128,10 +180,17 @@ async function fetchRss(url) {
  * 主处理函数
  */
 module.exports = async (req, res) => {
-  // 设置CORS（如果需要）
+  // 设置CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // 安全HTTP头
+  res.setHeader('X-Content-Type-Options', 'nosniff'); // 防止MIME类型嗅探
+  res.setHeader('X-Frame-Options', 'DENY'); // 防止点击劫持
+  res.setHeader('X-XSS-Protection', '1; mode=block'); // XSS防护
+  res.setHeader('Referrer-Policy', 'no-referrer'); // 不发送referrer信息
+  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'unsafe-inline'"); // 内容安全策略（允许内联样式）
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();

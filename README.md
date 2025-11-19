@@ -29,6 +29,164 @@ https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expres
 https://your-domain.vercel.app/?password=[你的密码]
 ```
 
+## 🌐 免费域名申请与绑定
+
+使用免费域名可以让你的RSS代理服务拥有更易记的访问地址，而不是使用Vercel默认的随机域名。以下是两个推荐的稳定免费域名服务。
+
+### 方案一：FreeDNS (afraid.org) - 推荐首选
+
+**优势：** 老牌服务，稳定可靠，注册快速，无需审批
+
+#### 1. 注册FreeDNS账号
+
+1. 访问 [https://freedns.afraid.org](https://freedns.afraid.org)
+2. 点击右上角 **Sign Up** 注册账号
+3. 填写用户名、邮箱、密码
+4. 检查邮箱，点击确认链接激活账号
+
+#### 2. 申请免费子域名
+
+1. 登录后，点击顶部菜单 **Subdomains** → **Add**
+2. 选择一个公共域名（推荐选择）：
+   - `mooo.com` - 适合个人项目
+   - `chickenkiller.com` - 创意域名
+   - `servehttp.com` - 适合web服务
+   - `web.app` - 现代化域名
+3. 在 **Subdomain** 输入框填写你想要的子域名，例如：`myrss`
+4. 在 **Destination** 填写你的Vercel域名（稍后获取）
+5. 类型选择 **CNAME**
+6. 点击 **Save!** 完成创建
+
+**示例：** 如果你选择 `mooo.com` 并输入 `myrss`，你的域名将是：`myrss.mooo.com`
+
+#### 3. 配置DNS记录（稍后在Vercel绑定后完成）
+
+DNS记录会自动生效，通常在几分钟内即可访问。
+
+### 方案二：is-a.dev - 面向开发者
+
+**优势：** 专业的开发者域名，完全免费，基于GitHub管理
+
+#### 1. 前置要求
+
+- GitHub账号
+- 基本的Git操作知识
+
+#### 2. 申请.is-a.dev域名
+
+1. 访问 [https://github.com/is-a-dev/register](https://github.com/is-a-dev/register)
+2. Fork该仓库到你的GitHub账号
+3. 在你的Fork仓库中，进入 `domains` 文件夹
+4. 创建一个新文件，文件名为你想要的域名，例如：`myrss.json`
+5. 文件内容格式：
+
+```json
+{
+  "description": "My RSS Proxy Service",
+  "repo": "https://github.com/你的用户名/rssjumper",
+  "owner": {
+    "username": "你的GitHub用户名",
+    "email": "你的邮箱"
+  },
+  "record": {
+    "CNAME": "你的vercel域名.vercel.app"
+  }
+}
+```
+
+6. 提交更改并创建 Pull Request
+7. 等待审核（通常1-3天），批准后域名即可使用
+
+**示例：** 文件名 `myrss.json` 将创建域名 `myrss.is-a.dev`
+
+### 在Vercel绑定自定义域名
+
+完成上述任一免费域名申请后，需要在Vercel中绑定：
+
+#### 步骤1：获取Vercel项目域名
+
+1. 登录 [Vercel Dashboard](https://vercel.com/dashboard)
+2. 进入你的 `rssjumper` 项目
+3. 点击顶部 **Settings** → **Domains**
+4. 你会看到默认域名，类似：`rssjumper-xxxx.vercel.app`
+
+#### 步骤2：添加自定义域名
+
+1. 在 **Domains** 页面，找到 **Add Domain** 输入框
+2. 输入你申请的免费域名，例如：
+   - `myrss.mooo.com` (FreeDNS)
+   - `myrss.is-a.dev` (is-a.dev)
+3. 点击 **Add**
+
+#### 步骤3：验证域名配置
+
+Vercel会显示DNS配置要求：
+
+**对于FreeDNS：**
+1. 回到 FreeDNS 网站
+2. 进入 **Subdomains** → 找到你的域名
+3. 点击 **Edit**
+4. 在 **Destination** 填写 `cname.vercel-dns.com`
+5. 保存更改
+
+**对于is-a.dev：**
+- 在你的PR中已经配置了CNAME，等待DNS生效即可
+
+#### 步骤4：等待DNS生效
+
+1. DNS传播通常需要 **5分钟 - 48小时**
+2. FreeDNS通常 **5-30分钟** 即可生效
+3. is-a.dev通常在PR合并后 **1-2小时** 生效
+
+#### 步骤5：验证绑定成功
+
+1. 在Vercel的 **Domains** 页面，你的域名旁边会显示 **✓ Valid Configuration**
+2. 访问你的自定义域名测试：
+
+```bash
+# 测试访问
+https://myrss.mooo.com
+
+# 测试RSS代理
+https://myrss.mooo.com/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
+```
+
+### 域名配置故障排查
+
+#### 问题1：DNS未生效
+
+**症状：** 访问域名显示"DNS_PROBE_FINISHED_NXDOMAIN"
+
+**解决方法：**
+1. 检查域名DNS配置是否正确
+2. 等待更长时间（最多48小时）
+3. 使用DNS检测工具：[https://dnschecker.org](https://dnschecker.org)
+
+#### 问题2：Vercel提示"Invalid Configuration"
+
+**症状：** Vercel显示域名配置无效
+
+**解决方法：**
+1. 确认CNAME记录指向 `cname.vercel-dns.com`
+2. 删除任何A记录（只保留CNAME）
+3. 等待5-10分钟后重新检查
+
+#### 问题3：证书错误
+
+**症状：** 访问时显示HTTPS证书错误
+
+**解决方法：**
+1. Vercel会自动颁发SSL证书，通常需要几分钟
+2. 在Vercel的 **Settings** → **Domains** 中检查SSL状态
+3. 如果超过1小时仍未生效，尝试删除域名重新添加
+
+### 域名管理建议
+
+1. **定期检查：** 每3个月检查一次域名和服务是否正常
+2. **备份配置：** 记录你的域名和DNS配置
+3. **多个域名：** 可以同时绑定多个免费域名作为备份
+4. **邮箱验证：** 确保域名服务的注册邮箱始终有效
+
 ## 📦 部署到Vercel（完全免费）
 
 ### 前置要求
