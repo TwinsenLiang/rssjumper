@@ -1,7 +1,9 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
 // 内存存储（注意：Vercel无服务器环境会定期清空）
-const cache = new Map(); // 缓存RSS内容
 const accessLog = []; // 访问历史
 const rateLimitMap = new Map(); // IP访问频率记录
 
@@ -9,7 +11,44 @@ const rateLimitMap = new Map(); // IP访问频率记录
 const PASSWORD = process.env.PASSWORD || 'fUgvef-fofzu7-pifjic'; // 请修改为您的密码，建议使用环境变量
 const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 2; // 每分钟最多访问次数，建议使用环境变量
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1分钟
-const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
+const CACHE_TTL = parseInt(process.env.CACHE_TTL) || 15 * 60 * 1000; // 15分钟缓存，建议使用环境变量
+const CACHE_DIR = process.env.CACHE_DIR || '/tmp/rssjumper-cache'; // 缓存目录
+
+// 确保缓存目录存在
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
+
+/**
+ * 生成URL的hash作为缓存文件名
+ */
+function getCacheFileName(url) {
+  const hash = crypto.createHash('md5').update(url).digest('hex');
+  return path.join(CACHE_DIR, `${hash}.xml`);
+}
+
+/**
+ * 生成RSS格式的错误信息
+ */
+function generateErrorRSS(url, errorMessage) {
+  const now = new Date().toUTCString();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>RSSJumper - 错误提示</title>
+    <link>https://github.com/rssjumper</link>
+    <description>RSSJumper RSS代理服务</description>
+    <lastBuildDate>${now}</lastBuildDate>
+    <item>
+      <title>RSSJumper已成功，但你请求的地址出错了</title>
+      <link>${url}</link>
+      <description>RSSJumper代理服务运行正常，但在获取RSS源时遇到问题。请求的URL: ${url}。错误信息: ${errorMessage}</description>
+      <pubDate>${now}</pubDate>
+      <guid isPermaLink="false">rssjumper-error-${Date.now()}</guid>
+    </item>
+  </channel>
+</rss>`;
+}
 
 /**
  * 检查是否为内网地址（防止SSRF攻击）
@@ -120,20 +159,34 @@ function checkRateLimit(ip) {
  */
 async function fetchRss(url) {
   const now = Date.now();
+  const cacheFile = getCacheFileName(url);
 
-  // 检查缓存
-  const cached = cache.get(url);
-  if (cached && now - cached.timestamp < CACHE_TTL) {
-    return {
-      data: cached.data,
-      fromCache: true
-    };
+  // 检查文件缓存
+  try {
+    if (fs.existsSync(cacheFile)) {
+      const stats = fs.statSync(cacheFile);
+      const cacheAge = now - stats.mtimeMs;
+
+      // 如果缓存未过期（15分钟内）
+      if (cacheAge < CACHE_TTL) {
+        const cachedData = fs.readFileSync(cacheFile, 'utf8');
+        console.log(`缓存命中: ${url}, 剩余时间: ${Math.round((CACHE_TTL - cacheAge) / 1000)}秒`);
+        return {
+          data: cachedData,
+          fromCache: true
+        };
+      } else {
+        console.log(`缓存过期: ${url}, 将重新获取`);
+      }
+    }
+  } catch (error) {
+    console.error('读取缓存文件失败:', error.message);
   }
 
-  // 抓取RSS
+  // 抓取RSS（超时15秒以处理网络延时）
   try {
     const response = await axios.get(url, {
-      timeout: 10000,
+      timeout: 15000, // 15秒超时
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; RSSJumper RSS Proxy/1.0)'
       },
@@ -151,11 +204,13 @@ async function fetchRss(url) {
       }
     }
 
-    // 存入缓存
-    cache.set(url, {
-      data: response.data,
-      timestamp: now
-    });
+    // 写入缓存文件
+    try {
+      fs.writeFileSync(cacheFile, response.data, 'utf8');
+      console.log(`缓存已更新: ${url}`);
+    } catch (error) {
+      console.error('写入缓存文件失败:', error.message);
+    }
 
     // 记录访问历史（最多保留100条）
     accessLog.push({
@@ -261,7 +316,9 @@ module.exports = async (req, res) => {
   <ul>
     <li>✅ 仅支持RSS/XML订阅源</li>
     <li>✅ 访问频率限制：2次/分钟/IP</li>
-    <li>✅ 5分钟智能缓存</li>
+    <li>✅ 15分钟文件缓存</li>
+    <li>✅ 15秒网络超时处理</li>
+    <li>✅ RSS格式错误提示</li>
     <li>✅ 访问历史记录</li>
   </ul>
 
@@ -297,7 +354,18 @@ module.exports = async (req, res) => {
     }
 
     // 抓取RSS
-    const result = await fetchRss(targetUrl);
+    let result;
+    try {
+      result = await fetchRss(targetUrl);
+    } catch (fetchError) {
+      // 如果是RSS获取失败，返回RSS格式的错误信息
+      console.error('RSS获取失败:', fetchError);
+      const errorRSS = generateErrorRSS(targetUrl, fetchError.message);
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('X-RSSJumper-Error', 'true');
+      res.status(200).send(errorRSS);
+      return;
+    }
 
     // 返回RSS内容（保持XML格式）
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
