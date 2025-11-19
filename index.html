@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RSSJumper - RSS代理服务</title>
+  <meta name="description" content="访问被阻挡的RSS订阅源">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 800px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 2.5em;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 1.1em;
+    }
+    .input-group {
+      margin: 30px 0;
+    }
+    label {
+      display: block;
+      margin-bottom: 10px;
+      color: #555;
+      font-weight: 500;
+    }
+    input[type="url"] {
+      width: 100%;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+    input[type="url"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      font-weight: 600;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    .result {
+      margin-top: 30px;
+      padding: 20px;
+      background: #f9f9f9;
+      border-radius: 10px;
+      border-left: 4px solid #667eea;
+      display: none;
+    }
+    .result.show { display: block; }
+    .result code {
+      background: #fff;
+      padding: 15px;
+      display: block;
+      border-radius: 5px;
+      overflow-x: auto;
+      margin-top: 10px;
+      word-break: break-all;
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin: 30px 0;
+    }
+    .feature {
+      padding: 20px;
+      background: #f5f5f5;
+      border-radius: 10px;
+      text-align: center;
+    }
+    .feature-icon {
+      font-size: 2em;
+      margin-bottom: 10px;
+    }
+    .feature-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 5px;
+    }
+    .feature-desc {
+      font-size: 0.9em;
+      color: #666;
+    }
+    .example {
+      background: #fff3cd;
+      padding: 15px;
+      border-radius: 10px;
+      margin: 20px 0;
+      border-left: 4px solid #ffc107;
+    }
+    .example strong {
+      color: #856404;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🦘 RSSJumper</h1>
+    <p class="subtitle">RSS代理服务 - 访问被阻挡的订阅源</p>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">🚀</div>
+        <div class="feature-title">快速代理</div>
+        <div class="feature-desc">即时访问RSS源</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-title">安全限制</div>
+        <div class="feature-desc">2次/分钟/IP</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">智能缓存</div>
+        <div class="feature-desc">5分钟缓存</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📊</div>
+        <div class="feature-title">访问历史</div>
+        <div class="feature-desc">记录所有源</div>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="rss-url">输入RSS订阅源地址：</label>
+      <input
+        type="url"
+        id="rss-url"
+        placeholder="https://example.com/feed.xml"
+        value="https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml"
+      >
+    </div>
+
+    <button onclick="generateUrl()">生成代理地址</button>
+
+    <div id="result" class="result">
+      <strong>✅ 代理地址已生成：</strong>
+      <code id="proxy-url"></code>
+      <button onclick="copyUrl()" style="margin-top: 10px;">📋 复制地址</button>
+    </div>
+
+    <div class="example">
+      <strong>💡 使用提示：</strong><br>
+      将生成的代理地址添加到你的RSS阅读器中即可使用
+    </div>
+
+    <div class="example">
+      <strong>🔑 查看访问历史：</strong><br>
+      访问 <code>/?password=fUgvef-fofzu7-pifjic</code>
+    </div>
+  </div>
+
+  <script>
+    function generateUrl() {
+      const input = document.getElementById('rss-url');
+      const result = document.getElementById('result');
+      const proxyUrlEl = document.getElementById('proxy-url');
+
+      const rssUrl = input.value.trim();
+      if (!rssUrl) {
+        alert('请输入RSS地址');
+        return;
+      }
+
+      const baseUrl = window.location.origin;
+      const proxyUrl = `${baseUrl}/?url=${encodeURIComponent(rssUrl)}`;
+
+      proxyUrlEl.textContent = proxyUrl;
+      result.classList.add('show');
+    }
+
+    function copyUrl() {
+      const proxyUrl = document.getElementById('proxy-url').textContent;
+      navigator.clipboard.writeText(proxyUrl).then(() => {
+        alert('✅ 地址已复制到剪贴板');
+      }).catch(() => {
+        alert('❌ 复制失败，请手动复制');
+      });
+    }
+
+    // 回车键提交
+    document.getElementById('rss-url').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        generateUrl();
+      }
+    });
+  </script>
+</body>
+</html>
