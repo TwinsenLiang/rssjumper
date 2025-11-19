@@ -61,7 +61,7 @@ function generateAdminHTML() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RSSJumper 管理后台</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com"><` + `/script>
 </head>
 <body class="bg-gray-50 min-h-screen">
   <div class="max-w-7xl mx-auto px-4 py-8">
@@ -192,24 +192,22 @@ function generateAdminHTML() {
         if (data.logs.length === 0) {
           historyBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无访问记录</td></tr>';
         } else {
-          historyBody.innerHTML = data.logs.map(log => \`
-            <tr class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm text-gray-900 break-all max-w-md">\${log.url}</td>
-              <td class="px-6 py-4 text-sm text-gray-900">\${log.count}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">\${log.firstAccess}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">\${log.lastAccess}</td>
-              <td class="px-6 py-4 text-sm">
-                \${log.isBlacklisted
-                  ? '<span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded">已禁用</span>'
-                  : '<span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">正常</span>'}
-              </td>
-              <td class="px-6 py-4 text-sm">
-                \${log.isBlacklisted
-                  ? \`<button onclick="unblacklist('\${encodeURIComponent(log.url)}')" class="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600">解禁</button>\`
-                  : \`<button onclick="blacklistUrl('\${encodeURIComponent(log.url)}')" class="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600">禁用</button>\`}
-              </td>
-            </tr>
-          \`).join('');
+          historyBody.innerHTML = data.logs.map(function(log) {
+            var statusBadge = log.isBlacklisted
+              ? '<span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded">已禁用</span>'
+              : '<span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">正常</span>';
+            var actionButton = log.isBlacklisted
+              ? '<button onclick="unblacklist(' + "'" + encodeURIComponent(log.url) + "'" + ')" class="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600">解禁</button>'
+              : '<button onclick="blacklistUrl(' + "'" + encodeURIComponent(log.url) + "'" + ')" class="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600">禁用</button>';
+            return '<tr class="hover:bg-gray-50">' +
+              '<td class="px-6 py-4 text-sm text-gray-900 break-all max-w-md">' + log.url + '</td>' +
+              '<td class="px-6 py-4 text-sm text-gray-900">' + log.count + '</td>' +
+              '<td class="px-6 py-4 text-sm text-gray-500">' + log.firstAccess + '</td>' +
+              '<td class="px-6 py-4 text-sm text-gray-500">' + log.lastAccess + '</td>' +
+              '<td class="px-6 py-4 text-sm">' + statusBadge + '</td>' +
+              '<td class="px-6 py-4 text-sm">' + actionButton + '</td>' +
+              '</tr>';
+          }).join('');
         }
 
         // 更新缓存文件表格
@@ -217,22 +215,21 @@ function generateAdminHTML() {
         if (data.cacheFiles.length === 0) {
           cacheBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无缓存文件</td></tr>';
         } else {
-          cacheBody.innerHTML = data.cacheFiles.map(cache => \`
-            <tr class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm text-gray-900 break-all max-w-md">\${cache.url}</td>
-              <td class="px-6 py-4 text-sm text-gray-900">\${cache.size}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">\${cache.lastModified}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">\${cache.age}</td>
-              <td class="px-6 py-4 text-sm">
-                \${cache.expired
-                  ? '<span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded">已过期</span>'
-                  : '<span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">有效</span>'}
-              </td>
-              <td class="px-6 py-4 text-sm">
-                <button onclick="clearCache('\${encodeURIComponent(cache.url)}')" class="px-3 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600">清除</button>
-              </td>
-            </tr>
-          \`).join('');
+          cacheBody.innerHTML = data.cacheFiles.map(function(cache) {
+            var statusBadge = cache.expired
+              ? '<span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded">已过期</span>'
+              : '<span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">有效</span>';
+            return '<tr class="hover:bg-gray-50">' +
+              '<td class="px-6 py-4 text-sm text-gray-900 break-all max-w-md">' + cache.url + '</td>' +
+              '<td class="px-6 py-4 text-sm text-gray-900">' + cache.size + '</td>' +
+              '<td class="px-6 py-4 text-sm text-gray-500">' + cache.lastModified + '</td>' +
+              '<td class="px-6 py-4 text-sm text-gray-500">' + cache.age + '</td>' +
+              '<td class="px-6 py-4 text-sm">' + statusBadge + '</td>' +
+              '<td class="px-6 py-4 text-sm">' +
+              '<button onclick="clearCache(' + "'" + encodeURIComponent(cache.url) + "'" + ')" class="px-3 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600">清除</button>' +
+              '</td>' +
+              '</tr>';
+          }).join('');
         }
       } catch (error) {
         alert('刷新数据失败: ' + error.message);
@@ -298,9 +295,9 @@ function generateAdminHTML() {
 
     // 页面加载时刷新数据
     window.addEventListener('load', refreshData);
-  </script>
-</body>
-</html>`;
+  <` + `/script>
+<` + `/body>
+<` + `/html>`;
 }
 
 /**
@@ -627,7 +624,7 @@ module.exports = async (req, res) => {
 
       // GET请求 - 显示管理页面HTML
       // 为管理页面设置宽松的CSP，允许加载Tailwind CSS
-      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self'");
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self'");
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('X-Frame-Options', 'DENY');
       res.setHeader('X-XSS-Protection', '1; mode=block');
