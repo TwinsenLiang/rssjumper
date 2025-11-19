@@ -7,6 +7,9 @@ const GIST_ID = process.env.GIST_ID;
 const CACHE_TTL = 15 * 60 * 1000; // 15分钟缓存
 const ACCESS_LOG_FILE = 'rssjumper-access-log.json'; // 访问记录文件名
 
+// 管理后台密码
+const PASSWORD = process.env.PASSWORD || 'rssjumper2025'; // 默认密码，建议通过环境变量设置
+
 // 【第4步】访问记录存储（内存）
 const accessLog = new Map(); // url -> { count, firstAccess, lastAccess }
 let accessLogSaveTimer = null; // 防抖定时器
@@ -124,6 +127,57 @@ function recordAccess(url) {
 
   // 触发保存（带防抖）
   saveAccessLog();
+}
+
+/**
+ * 【第1步-A】获取Gist中的所有缓存文件列表
+ */
+async function getCacheFilesList() {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    return [];
+  }
+
+  try {
+    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      timeout: 5000
+    });
+
+    const cacheFiles = [];
+    const files = response.data.files;
+
+    Object.entries(files).forEach(([filename, fileData]) => {
+      // 只处理缓存文件（以rss-cache-开头）
+      if (filename.startsWith('rss-cache-')) {
+        try {
+          const content = JSON.parse(fileData.content);
+          const now = Date.now();
+          const age = now - content.cachedAt;
+          const expired = age > CACHE_TTL;
+
+          cacheFiles.push({
+            filename,
+            url: content.url,
+            size: fileData.size,
+            cachedAt: new Date(content.cachedAt).toLocaleString('zh-CN'),
+            expiresAt: new Date(content.expiresAt).toLocaleString('zh-CN'),
+            age: Math.floor(age / 1000 / 60) + '分钟前',
+            expired: expired
+          });
+        } catch (e) {
+          // 解析失败跳过
+        }
+      }
+    });
+
+    return cacheFiles;
+  } catch (error) {
+    console.log(`[管理后台] 获取缓存列表失败: ${error.message}`);
+    return [];
+  }
 }
 
 /**
@@ -391,6 +445,273 @@ module.exports = async (req, res) => {
     }
 
     // ==========================================
+    // 【第1步-A】管理后台
+    // ==========================================
+    const password = url.searchParams.get('password');
+
+    if (password) {
+      // 验证密码
+      if (password !== PASSWORD) {
+        res.status(403).json({ error: '密码错误' });
+        return;
+      }
+
+      console.log(`[请求] 访问管理后台`);
+
+      // 处理POST请求（获取数据）
+      if (req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body);
+
+            if (data.action === 'getData') {
+              // 获取访问记录
+              const logs = Array.from(accessLog.entries()).map(([url, record]) => ({
+                url,
+                count: record.count,
+                firstAccess: new Date(record.firstAccess).toLocaleString('zh-CN'),
+                lastAccess: new Date(record.lastAccess).toLocaleString('zh-CN')
+              }));
+
+              // 获取缓存列表
+              const cacheFiles = await getCacheFilesList();
+
+              res.status(200).json({
+                success: true,
+                logs,
+                cacheFiles,
+                stats: {
+                  totalAccess: logs.length,
+                  totalCached: cacheFiles.length
+                }
+              });
+            } else {
+              res.status(400).json({ success: false, message: '未知操作' });
+            }
+          } catch (error) {
+            res.status(400).json({ success: false, message: '请求数据格式错误' });
+          }
+        });
+        return;
+      }
+
+      // GET请求 - 返回管理后台页面
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 - RSSJumper</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 30px;
+      font-size: 2em;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    .stat-card {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .stat-value {
+      font-size: 2.5em;
+      font-weight: bold;
+      color: #667eea;
+    }
+    .stat-label {
+      color: #666;
+      margin-top: 5px;
+    }
+    .section {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .section h2 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 1.3em;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      background: #f8f9fa;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #555;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    tr:hover {
+      background: #f8f9fa;
+    }
+    .expired {
+      color: #dc3545;
+      font-weight: 600;
+    }
+    .valid {
+      color: #28a745;
+      font-weight: 600;
+    }
+    .url-cell {
+      max-width: 400px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+    .refresh-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+    .refresh-btn:hover {
+      background: #5568d3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛠️ RSSJumper 管理后台</h1>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-access">-</div>
+        <div class="stat-label">访问记录数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-cache">-</div>
+        <div class="stat-label">缓存文件数</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>📊 访问记录</h2>
+      <button class="refresh-btn" onclick="loadData()">🔄 刷新数据</button>
+      <div id="access-log-table">
+        <div class="loading">正在加载...</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>💾 缓存文件</h2>
+      <div id="cache-files-table">
+        <div class="loading">正在加载...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const password = new URLSearchParams(window.location.search).get('password');
+
+    async function loadData() {
+      try {
+        const response = await fetch('/?password=' + encodeURIComponent(password), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getData' })
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          alert('加载数据失败: ' + data.message);
+          return;
+        }
+
+        // 更新统计
+        document.getElementById('stat-access').textContent = data.stats.totalAccess;
+        document.getElementById('stat-cache').textContent = data.stats.totalCached;
+
+        // 更新访问记录表格
+        const accessLogHtml = data.logs.length > 0 ?
+          '<table><thead><tr><th>RSS URL</th><th>访问次数</th><th>首次访问</th><th>最后访问</th></tr></thead><tbody>' +
+          data.logs.map(log =>
+            '<tr>' +
+            '<td class="url-cell" title="' + log.url + '">' + log.url + '</td>' +
+            '<td>' + log.count + '</td>' +
+            '<td>' + log.firstAccess + '</td>' +
+            '<td>' + log.lastAccess + '</td>' +
+            '</tr>'
+          ).join('') +
+          '</tbody></table>' :
+          '<div class="loading">暂无访问记录</div>';
+
+        document.getElementById('access-log-table').innerHTML = accessLogHtml;
+
+        // 更新缓存文件表格
+        const cacheFilesHtml = data.cacheFiles.length > 0 ?
+          '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>过期时间</th><th>状态</th></tr></thead><tbody>' +
+          data.cacheFiles.map(file =>
+            '<tr>' +
+            '<td class="url-cell" title="' + file.url + '">' + file.url + '</td>' +
+            '<td>' + (file.size / 1024).toFixed(2) + ' KB</td>' +
+            '<td>' + file.cachedAt + '</td>' +
+            '<td>' + file.expiresAt + '</td>' +
+            '<td class="' + (file.expired ? 'expired' : 'valid') + '">' +
+              (file.expired ? '已过期' : '有效') +
+            '</td>' +
+            '</tr>'
+          ).join('') +
+          '</tbody></table>' :
+          '<div class="loading">暂无缓存文件</div>';
+
+        document.getElementById('cache-files-table').innerHTML = cacheFilesHtml;
+
+      } catch (error) {
+        alert('加载数据失败: ' + error.message);
+      }
+    }
+
+    // 页面加载时自动获取数据
+    loadData();
+
+    // 每30秒自动刷新
+    setInterval(loadData, 30000);
+  </script>
+</body>
+</html>`);
+      return;
+    }
+
+    // ==========================================
     // 【第2步】首页显示
     // ==========================================
     console.log(`[请求] 访问首页`);
@@ -522,6 +843,17 @@ module.exports = async (req, res) => {
         <strong>示例：</strong><br>
         <code>https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml</code>
       </div>
+    </div>
+
+    <div class="usage">
+      <h2>🛠️ 管理后台</h2>
+      <div class="example">
+        <strong>访问地址：</strong><br>
+        <code>https://your-domain.vercel.app/?password=你的密码</code>
+      </div>
+      <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
+        默认密码：<code>rssjumper2025</code>（建议通过环境变量 PASSWORD 修改）
+      </p>
     </div>
 
     <div style="text-align: center; margin-top: 30px; color: #999; font-size: 0.9em;">
