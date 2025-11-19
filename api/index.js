@@ -61,6 +61,10 @@ function generateAdminHTML() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RSSJumper 管理后台</title>
+  <script>
+    // 禁用 Tailwind CSS CDN 的生产环境警告
+    window.process = { env: { NODE_ENV: 'production' } };
+  <` + `/script>
   <script src="https://cdn.tailwindcss.com"><` + `/script>
 </head>
 <body class="bg-gray-50 min-h-screen">
