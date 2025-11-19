@@ -104,8 +104,14 @@ module.exports = async (req, res) => {
   }
 
   try {
+    // 调试信息
+    console.log('[调试] req.url:', req.url);
+    console.log('[调试] req.headers.host:', req.headers.host);
+
     const url = new URL(req.url, `http://${req.headers.host}`);
     const targetUrl = url.searchParams.get('url');
+
+    console.log('[调试] 解析后的targetUrl:', targetUrl);
 
     // ==========================================
     // 【第1步】RSS代理功能 - 最高优先级
