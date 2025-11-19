@@ -36,7 +36,7 @@ rssjumper/
 
 ### 4. 访问历史记录
 - ✅ 记录所有被代理的RSS源
-- ✅ 密码保护：`fUgvef-fofzu7-pifjic`
+- ✅ 密码保护：`[你的密码]`
 - ✅ JSON格式返回，包含URL和时间戳
 - ✅ 最多保留100条记录
 
@@ -105,7 +105,7 @@ vercel dev
 测试URL：
 - 首页：`http://localhost:3000/`
 - 代理：`http://localhost:3000/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml`
-- 历史：`http://localhost:3000/?password=fUgvef-fofzu7-pifjic`
+- 历史：`http://localhost:3000/?password=[你的密码]`
 
 ## 🎯 使用示例
 
@@ -118,7 +118,7 @@ https://your-domain.vercel.app/?url=https://example.com/feed.xml
 ### 查看访问历史
 
 ```
-https://your-domain.vercel.app/?password=fUgvef-fofzu7-pifjic
+https://your-domain.vercel.app/?password=[你的密码]
 ```
 
 返回示例：
@@ -139,7 +139,7 @@ https://your-domain.vercel.app/?password=fUgvef-fofzu7-pifjic
 在 `api/index.js` 中可修改：
 
 ```javascript
-const PASSWORD = 'fUgvef-fofzu7-pifjic';  // 访问密码
+const PASSWORD = '[你的密码]';  // 访问密码
 const RATE_LIMIT = 2;                      // 频率限制（次/分钟）
 const RATE_LIMIT_WINDOW = 60 * 1000;       // 限制时间窗口
 const CACHE_TTL = 5 * 60 * 1000;           // 缓存时长（毫秒）

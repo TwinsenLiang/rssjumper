@@ -26,7 +26,7 @@ https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expres
 使用密码参数查看所有被代理过的RSS源：
 
 ```
-https://your-domain.vercel.app/?password=fUgvef-fofzu7-pifjic
+https://your-domain.vercel.app/?password=[你的密码]
 ```
 
 ## 📦 部署到Vercel（完全免费）
@@ -106,7 +106,7 @@ https://your-domain.vercel.app/
 https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
 
 # 查看访问历史
-https://your-domain.vercel.app/?password=fUgvef-fofzu7-pifjic
+https://your-domain.vercel.app/?password=[你的密码]
 ```
 
 ## 🔧 本地开发测试（可选）
@@ -168,10 +168,28 @@ vercel dev
 
 ### 修改访问密码
 
-编辑 `api/index.js` 文件第7行：
+**方法1：使用环境变量（推荐）**
+
+在Vercel项目设置中添加环境变量：
+1. 进入Vercel Dashboard → 你的项目 → Settings → Environment Variables
+2. 添加：`PASSWORD` = `你的新密码`
+3. 重新部署项目生效
+
+**方法2：直接修改代码**
+
+编辑 `api/index.js` 文件第9行：
 
 ```javascript
-const PASSWORD = '你的新密码';
+const PASSWORD = process.env.PASSWORD || '你的新密码'; // 请修改为您的密码
+```
+
+**配置文件方式**
+
+也可以复制 `.env.example` 为 `.env` 并修改：
+
+```bash
+cp .env.example .env
+# 编辑 .env 文件中的配置
 ```
 
 ### 修改频率限制

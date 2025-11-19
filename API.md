@@ -98,7 +98,7 @@ curl "https://your-domain.vercel.app/?url=https://example.com/feed.xml"
 **方法**: `GET`
 
 **参数**:
-- `password` (必需): 访问密码（默认: `fUgvef-fofzu7-pifjic`）
+- `password` (必需): 访问密码（默认: `[你的密码]`）
 
 **响应格式**: JSON
 
@@ -132,7 +132,7 @@ curl "https://your-domain.vercel.app/?url=https://example.com/feed.xml"
 curl "https://your-domain.vercel.app/?password=fUgvef-fofzu7-pifjic"
 
 # 或者使用 /list 端点
-curl "https://your-domain.vercel.app/list?password=fUgvef-fofzu7-pifjic"
+curl "https://your-domain.vercel.app/list?password=[你的密码]"
 ```
 
 ---
@@ -175,7 +175,7 @@ console.log(proxyUrls);
 
 ```bash
 #!/bin/bash
-PASSWORD="fUgvef-fofzu7-pifjic"
+PASSWORD="[你的密码]"
 curl -s "https://your-domain.vercel.app/?password=$PASSWORD" | jq '.total'
 ```
 

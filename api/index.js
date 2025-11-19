@@ -6,7 +6,7 @@ const accessLog = []; // 访问历史
 const rateLimitMap = new Map(); // IP访问频率记录
 
 // 配置
-const PASSWORD = 'fUgvef-fofzu7-pifjic';
+const PASSWORD = process.env.PASSWORD || 'fUgvef-fofzu7-pifjic'; // 请修改为您的密码，建议使用环境变量
 const RATE_LIMIT = 2; // 每分钟最多2次
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1分钟
 const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存

@@ -61,8 +61,8 @@ https://你的域名.vercel.app/
 # 测试代理
 https://你的域名.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
 
-# 查看历史（密码: fUgvef-fofzu7-pifjic）
-https://你的域名.vercel.app/?password=fUgvef-fofzu7-pifjic
+# 查看历史（密码: [你的密码]）
+https://你的域名.vercel.app/?password=[你的密码]
 ```
 
 ## 🎉 完成！
