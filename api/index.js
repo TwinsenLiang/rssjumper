@@ -7,8 +7,13 @@ const GIST_ID = process.env.GIST_ID;
 const CACHE_TTL = 15 * 60 * 1000; // 15分钟缓存
 const ACCESS_LOG_FILE = 'rssjumper-access-log.json'; // 访问记录文件名
 
-// 管理后台密码
-const PASSWORD = process.env.PASSWORD || 'rssjumper2025'; // 默认密码，建议通过环境变量设置
+// 管理后台密码（必须通过环境变量 PASSWORD 设置）
+const PASSWORD = process.env.PASSWORD;
+if (PASSWORD) {
+  console.log('[管理后台] 密码已配置（长度）:', PASSWORD.length);
+} else {
+  console.log('[管理后台] ⚠️  未配置PASSWORD环境变量，管理后台将无法访问');
+}
 
 // 【第4步】访问记录存储（内存）
 const accessLog = new Map(); // url -> { count, firstAccess, lastAccess }
@@ -852,7 +857,7 @@ module.exports = async (req, res) => {
         <code>https://your-domain.vercel.app/?password=你的密码</code>
       </div>
       <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
-        默认密码：<code>rssjumper2025</code>（建议通过环境变量 PASSWORD 修改）
+        密码需通过环境变量 <code>PASSWORD</code> 设置
       </p>
     </div>
 
