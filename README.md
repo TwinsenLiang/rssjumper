@@ -5,16 +5,17 @@
 ## ✨ 功能特性
 
 - ✅ **RSS代理**: 通过URL参数代理访问任何RSS订阅源
-- ✅ **频率限制**: 单个IP限制为2次/分钟，防止滥用
-- ✅ **文件缓存**: 15分钟内相同源不重复请求，使用文件系统缓存，减少服务器压力
+- ✅ **智能频率限制**: 可配置的每分钟请求限制（默认60次），超限自动封禁5分钟
+- ✅ **IP封禁持久化**: 封禁IP存储在GitHub Gist，跨实例生效
+- ✅ **Gist智能缓存**: 15分钟缓存，永久存储在GitHub Gist，跨实例共享
+- ✅ **访问历史记录**: 每日访问统计，自动累计，永久保存在Gist
 - ✅ **网络容错**: 15秒超时设置，处理网络延时情况
 - ✅ **错误提示**: 以RSS格式返回错误信息，便于调试和问题定位
-- ✅ **管理后台**: Tailwind CSS设计的美观管理界面，支持访问历史和缓存管理
+- ✅ **管理后台**: 简洁美观的管理界面，支持访问历史和缓存管理
 - ✅ **黑名单功能**: 禁用特定URL，被禁用的URL以RSS格式返回错误信息
-- ✅ **缓存管理**: 查看和清除缓存文件，实时监控缓存状态
-- ✅ **访问统计**: 记录每个RSS源的访问次数和时间
-- ✅ **安全验证**: 仅处理RSS/XML格式，拒绝其他文件类型，防止SSRF攻击
-- ✅ **免费部署**: 完全基于Vercel免费额度
+- ✅ **缓存监控**: 查看所有缓存文件状态，实时监控过期时间
+- ✅ **安全防护**: 防止SSRF攻击，禁止访问内网地址，仅支持http/https
+- ✅ **完全免费**: 基于Vercel和GitHub免费服务
 
 ## 🚀 快速开始
 
@@ -31,24 +32,28 @@ https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expres
 使用密码参数访问管理后台，查看和管理RSS代理服务：
 
 ```
-https://your-domain.vercel.app/api/admin?password=[你的密码]
+https://your-domain.vercel.app/?password=你的密码
 ```
 
 管理后台功能：
 
 **访问历史管理**
 - 查看所有被代理的RSS源地址
-- 显示每个源的访问次数、首次访问时间、最后访问时间
-- 禁用特定URL（黑名单功能）
-- 已禁用的URL会以RSS格式返回错误提示
+- 显示每个源的今日访问次数（每天自动重置）
+- 显示首次访问时间、最后访问时间
+- 一键加入/移除黑名单
+- 黑名单实时同步到Gist，跨实例生效
 
 **缓存文件管理**
 - 查看所有缓存的RSS文件
-- 显示缓存文件大小、缓存时间、缓存年龄
-- 清除特定URL的缓存
-- 查看缓存是否过期
+- 显示缓存文件大小、缓存时间、过期时间
+- 实时显示缓存状态（有效/已过期）
+- 自动清理过期缓存
 
-管理后台使用Tailwind CSS设计，界面美观易用。
+**数据持久化**
+- 所有数据存储在GitHub Gist
+- 支持跨Vercel实例共享数据
+- 访问历史自动累计，不会丢失
 
 ## 🌐 免费域名申请与绑定
 
@@ -285,7 +290,7 @@ https://your-domain.vercel.app/
 https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
 
 # 访问管理后台
-https://your-domain.vercel.app/api/admin?password=[你的密码]
+https://your-domain.vercel.app/?password=你的密码
 ```
 
 ## 🔧 本地开发测试（可选）
@@ -375,18 +380,27 @@ cp .env.example .env
 ```
 
 **支持的环境变量列表：**
-- `PASSWORD` - 访问历史查看密码
-- `RATE_LIMIT` - 每分钟访问次数限制（默认：2）
-- `CACHE_TTL` - 缓存时长，单位毫秒（默认：900000，即15分钟）
-- `CACHE_DIR` - 缓存目录路径（默认：`/tmp/rssjumper-cache`）
 
-**GitHub Gist持久化存储（可选，推荐）：**
+**基础配置：**
+- `PASSWORD` - 管理后台访问密码（必需，未配置则无法访问管理后台）
+- `RATE_LIMIT` - 每分钟请求次数限制（默认：60）
+- `CACHE_TTL` - 缓存时长，单位毫秒（默认：900000，即15分钟）
+
+**GitHub Gist持久化存储（必需配置）：**
 - `GITHUB_TOKEN` - GitHub Personal Access Token（需要gist权限）
 - `GIST_ID` - 存储数据的Gist ID
-- `GIST_ACCESS_LOG_FILE` - 访问历史文件名（默认：rssjumper-access-log.json）
-- `GIST_BLACKLIST_FILE` - 黑名单文件名（默认：rssjumper-blacklist.json）
 
-**详细配置说明请查看：[GIST_SETUP.md](GIST_SETUP.md)**
+RSSJumper使用GitHub Gist存储以下数据：
+- 访问记录（rssjumper-access-log.json）
+- 黑名单（rssjumper-blacklist.json）
+- 封禁IP列表（rssjumper-banned-ips.json）
+- RSS缓存文件（rss-cache-*.json）
+
+**配置说明：**
+1. 访问记录每日自动累计，记录每个RSS源的访问次数和时间
+2. 黑名单实时同步，禁用的URL立即生效
+3. 封禁IP自动过期，5分钟后自动解除
+4. 缓存文件15分钟过期，自动更新
 
 注意：`.env` 文件仅在本地开发时生效，Vercel部署需要在Dashboard中配置环境变量。
 
@@ -396,16 +410,14 @@ cp .env.example .env
 
 在Vercel项目设置中添加环境变量：
 1. 进入Vercel Dashboard → 你的项目 → Settings → Environment Variables
-2. 添加：`RATE_LIMIT` = `5`（表示每分钟最多5次访问）
+2. 添加：`RATE_LIMIT` = `100`（表示每分钟最多100次访问）
 3. 重新部署项目生效
 
-**方法2：直接修改代码**
-
-编辑 `api/index.js` 文件第10行：
-
-```javascript
-const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 5; // 改为5次/分钟
-```
+**频率限制说明：**
+- 默认值：60次/分钟
+- 超限处理：超过限制的IP将被封禁5分钟
+- 封禁存储：封禁IP存储在Gist，跨实例生效
+- 自动解封：5分钟后自动解除封禁
 
 ### 修改缓存时间
 
@@ -413,46 +425,45 @@ const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 5; // 改为5次/分钟
 
 在Vercel项目设置中添加环境变量：
 1. 进入Vercel Dashboard → 你的项目 → Settings → Environment Variables
-2. 添加：`CACHE_TTL` = `900000`（单位：毫秒，900000 = 15分钟）
+2. 添加：`CACHE_TTL` = `1200000`（单位：毫秒，1200000 = 20分钟）
 3. 重新部署项目生效
-
-**方法2：直接修改代码**
-
-编辑 `api/index.js` 文件第14行：
-
-```javascript
-const CACHE_TTL = 20 * 60 * 1000; // 改为20分钟
-```
 
 ### 缓存机制说明
 
-RSSJumper使用文件系统缓存机制：
+RSSJumper使用GitHub Gist智能缓存机制：
 
-1. **缓存位置**: `/tmp/rssjumper-cache/` 目录（Vercel环境）
-2. **缓存时长**: 默认15分钟，可通过环境变量配置
-3. **缓存文件名**: 使用URL的MD5哈希值作为文件名
-4. **缓存更新**:
+1. **缓存位置**: GitHub Gist（云端存储，跨实例共享）
+2. **缓存时长**: 默认15分钟（900000毫秒），可通过CACHE_TTL环境变量配置
+3. **缓存文件名**: `rss-cache-{URL的MD5哈希}.json`
+4. **缓存策略**:
    - 缓存未过期时直接返回缓存内容（响应头 `X-RSSJumper-Cache: HIT`）
-   - 缓存过期后重新获取并更新缓存（响应头 `X-RSSJumper-Cache: MISS`）
-5. **错误处理**: 如果源站无法访问，返回RSS格式的错误信息
+   - 缓存过期后重新获取并异步更新缓存（响应头 `X-RSSJumper-Cache: MISS`）
+5. **缓存优势**:
+   - 永久存储，不会因实例回收而丢失
+   - 跨实例共享，所有请求都能命中缓存
+   - 异步更新，不阻塞响应
+6. **错误处理**: 如果源站无法访问，返回RSS格式的错误信息
 
 ### 数据持久化说明
 
-**重要**：Vercel serverless函数的`/tmp`目录会在函数实例回收时清空，导致访问历史和黑名单丢失。
+RSSJumper使用GitHub Gist作为永久存储方案：
 
-**解决方案**：使用GitHub Gist永久存储数据
+**存储的数据：**
+- ✅ **访问记录**：每个RSS源的访问次数、首次/最后访问时间、每日访问统计
+- ✅ **黑名单**：禁用的RSS源URL列表
+- ✅ **封禁IP**：频率限制触发的IP封禁列表（自动过期）
+- ✅ **RSS缓存**：缓存的RSS内容（15分钟过期）
 
-- ✅ **永久保存**：数据存储在GitHub，不会丢失
-- ✅ **跨实例共享**：所有函数实例共享同一份数据
+**技术优势：**
+- ✅ **永久保存**：数据存储在GitHub，不会因实例回收而丢失
+- ✅ **跨实例共享**：所有Vercel函数实例共享同一份数据
 - ✅ **完全免费**：GitHub Gist免费，API限额充足（5000次/小时）
-- ✅ **性能优化**：60秒防抖批量保存，避免频繁API调用
+- ✅ **异步保存**：写入操作不阻塞响应，保证性能
+- ✅ **数据合并**：访问记录自动累计，防止并发覆盖
 
-**配置方法**：参见 [GIST_SETUP.md](GIST_SETUP.md) 详细教程
-
-**不配置的影响**：
-- 访问历史可能在函数冷启动后丢失（低流量时更频繁）
-- 黑名单可能丢失
-- RSS缓存不受影响（缓存文件会保留更久）
+**配置要求：**
+- 必须配置 `GITHUB_TOKEN` 和 `GIST_ID` 环境变量
+- 未配置时服务仍可运行，但数据仅保存在内存中（实例回收后丢失）
 
 ### 配置修改后如何生效
 
@@ -487,11 +498,13 @@ Vercel免费计划（Hobby Plan）包括：
 
 ## 🛡️ 安全说明
 
-1. **密码保护**: 访问历史查看功能需要密码
-2. **格式验证**: 仅允许RSS/XML格式，拒绝其他文件
-3. **频率限制**: 防止单个IP滥用
-4. **协议限制**: 仅支持http/https协议
-5. **私有仓库**: 建议将GitHub仓库设为私有
+1. **密码保护**: 管理后台访问需要配置PASSWORD环境变量
+2. **SSRF防护**: 禁止访问内网地址（localhost、127.0.0.1、192.168.x.x、10.x.x.x等）
+3. **协议限制**: 仅支持http/https协议，拒绝其他协议
+4. **频率限制**: 可配置的每分钟请求限制（默认60次），超限自动封禁5分钟
+5. **IP封禁持久化**: 封禁IP存储在Gist，跨实例生效
+6. **URL验证**: 严格验证URL格式，防止恶意请求
+7. **私有仓库**: 建议将GitHub仓库设为私有，保护环境变量
 
 ## 🔍 故障排查
 
@@ -517,10 +530,19 @@ Vercel免费计划（Hobby Plan）包括：
 
 ### 频率限制问题
 
-如果频繁遇到429错误：
-1. 等待1分钟后重试
-2. 检查是否有多个设备共享同一IP
-3. 可以适当调高 `RATE_LIMIT` 配置
+如果遇到429错误（Too Many Requests）：
+1. **等待5分钟**：IP被封禁后需要等待5分钟自动解封
+2. **检查访问频率**：默认限制为60次/分钟
+3. **多设备共享IP**：如果多个设备共享同一公网IP，可能更容易触发限制
+4. **调整限制**：可以通过配置 `RATE_LIMIT` 环境变量调高限制
+
+**错误响应示例：**
+```json
+{
+  "error": "请求过于频繁",
+  "message": "您的IP已被暂时封禁，请稍后再试"
+}
+```
 
 ## 📝 使用限制
 
