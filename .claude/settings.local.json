@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "WebSearch",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\n域名申请与绑定\n\n- 添加FreeDNS和is-a.dev两个稳定的免费域名服务申请指引\n- 添加Vercel自定义域名绑定详细步骤\n- 添加域名配置故障排查说明\n- 修复SSRF安全漏洞，阻止访问内网地址\n- 添加安全HTTP响应头（XSS防护、点击劫持防护等）\n- 增强URL验证，防止恶意请求\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
