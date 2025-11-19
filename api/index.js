@@ -135,6 +135,41 @@ function recordAccess(url) {
 }
 
 /**
+ * 【第1步-A】从Gist读取访问记录（用于管理后台显示）
+ */
+async function getAccessLogFromGist() {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    return [];
+  }
+
+  try {
+    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      timeout: 5000
+    });
+
+    const file = response.data.files[ACCESS_LOG_FILE];
+    if (!file || !file.content) {
+      return [];
+    }
+
+    const data = JSON.parse(file.content);
+    return Object.entries(data).map(([url, record]) => ({
+      url,
+      count: record.count,
+      firstAccess: new Date(record.firstAccess).toLocaleString('zh-CN'),
+      lastAccess: new Date(record.lastAccess).toLocaleString('zh-CN')
+    }));
+  } catch (error) {
+    console.log(`[管理后台] 读取访问记录失败: ${error.message}`);
+    return [];
+  }
+}
+
+/**
  * 【第1步-A】获取Gist中的所有缓存文件列表
  */
 async function getCacheFilesList() {
@@ -473,13 +508,8 @@ module.exports = async (req, res) => {
             const data = JSON.parse(body);
 
             if (data.action === 'getData') {
-              // 获取访问记录
-              const logs = Array.from(accessLog.entries()).map(([url, record]) => ({
-                url,
-                count: record.count,
-                firstAccess: new Date(record.firstAccess).toLocaleString('zh-CN'),
-                lastAccess: new Date(record.lastAccess).toLocaleString('zh-CN')
-              }));
+              // 从Gist读取访问记录（而不是从内存Map读取）
+              const logs = await getAccessLogFromGist();
 
               // 获取缓存列表
               const cacheFiles = await getCacheFilesList();
