@@ -17,8 +17,6 @@ if (PASSWORD) {
 
 // 【第4步】访问记录存储（内存）
 const accessLog = new Map(); // url -> { count, firstAccess, lastAccess }
-let accessLogSaveTimer = null; // 防抖定时器
-let accessLogChanged = false; // 数据是否已变更
 
 /**
  * 生成URL的MD5哈希值（用作缓存文件名）
@@ -63,82 +61,71 @@ async function loadAccessLog() {
 }
 
 /**
- * 【第4步】保存访问记录到Gist（带60秒防抖）
+ * 【第4步】保存访问记录到Gist（立即异步保存，不阻塞响应）
  */
-function saveAccessLog() {
-  accessLogChanged = true;
-
-  // 清除旧定时器
-  if (accessLogSaveTimer) {
-    clearTimeout(accessLogSaveTimer);
+async function saveAccessLog() {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    return;
   }
 
-  // 60秒后批量保存
-  accessLogSaveTimer = setTimeout(async () => {
-    if (!accessLogChanged || !GITHUB_TOKEN || !GIST_ID) {
-      return;
-    }
+  try {
+    console.log('[访问记录] 保存到Gist...');
 
+    // 【修复】先从Gist读取现有数据，合并后再保存
+    let existingData = {};
     try {
-      console.log('[访问记录] 保存到Gist...');
-
-      // 【修复】先从Gist读取现有数据，合并后再保存
-      let existingData = {};
-      try {
-        const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
-          headers: {
-            'Authorization': `token ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json'
-          },
-          timeout: 5000
-        });
-
-        const file = response.data.files[ACCESS_LOG_FILE];
-        if (file && file.content) {
-          existingData = JSON.parse(file.content);
-        }
-      } catch (error) {
-        console.log('[访问记录] 读取现有数据失败，将创建新文件');
-      }
-
-      // 合并数据：将内存中的数据合并到现有数据
-      const memoryData = Object.fromEntries(accessLog);
-      Object.entries(memoryData).forEach(([url, record]) => {
-        if (existingData[url]) {
-          // URL已存在，累加访问次数
-          existingData[url].count += record.count;
-          existingData[url].lastAccess = Math.max(existingData[url].lastAccess, record.lastAccess);
-          existingData[url].firstAccess = Math.min(existingData[url].firstAccess, record.firstAccess);
-        } else {
-          // 新URL
-          existingData[url] = record;
-        }
+      const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 5000
       });
 
-      await axios.patch(
-        `https://api.github.com/gists/${GIST_ID}`,
-        {
-          files: {
-            [ACCESS_LOG_FILE]: {
-              content: JSON.stringify(existingData, null, 2)
-            }
-          }
-        },
-        {
-          headers: {
-            'Authorization': `token ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json'
-          },
-          timeout: 5000
-        }
-      );
-
-      console.log('[访问记录] 保存成功');
-      accessLogChanged = false;
+      const file = response.data.files[ACCESS_LOG_FILE];
+      if (file && file.content) {
+        existingData = JSON.parse(file.content);
+      }
     } catch (error) {
-      console.log(`[访问记录] 保存失败: ${error.message}`);
+      console.log('[访问记录] 读取现有数据失败，将创建新文件');
     }
-  }, 60000); // 60秒防抖
+
+    // 合并数据：将内存中的数据合并到现有数据
+    const memoryData = Object.fromEntries(accessLog);
+    Object.entries(memoryData).forEach(([url, record]) => {
+      if (existingData[url]) {
+        // URL已存在，累加访问次数
+        existingData[url].count += record.count;
+        existingData[url].lastAccess = Math.max(existingData[url].lastAccess, record.lastAccess);
+        existingData[url].firstAccess = Math.min(existingData[url].firstAccess, record.firstAccess);
+      } else {
+        // 新URL
+        existingData[url] = record;
+      }
+    });
+
+    await axios.patch(
+      `https://api.github.com/gists/${GIST_ID}`,
+      {
+        files: {
+          [ACCESS_LOG_FILE]: {
+            content: JSON.stringify(existingData, null, 2)
+          }
+        }
+      },
+      {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 5000
+      }
+    );
+
+    console.log('[访问记录] 保存成功');
+  } catch (error) {
+    console.log(`[访问记录] 保存失败: ${error.message}`);
+  }
 }
 
 /**
@@ -159,10 +146,12 @@ function recordAccess(url) {
     });
   }
 
-  console.log(`[访问记录] ${url} - 访问次数: ${accessLog.get(url).count}`);
+  console.log(`[访问记录] ${url} - 本次实例访问次数: ${accessLog.get(url).count}`);
 
-  // 触发保存（带防抖）
-  saveAccessLog();
+  // 异步保存到Gist（不阻塞响应）
+  saveAccessLog().catch(err => {
+    console.log(`[访问记录] 异步保存失败: ${err.message}`);
+  });
 }
 
 /**
