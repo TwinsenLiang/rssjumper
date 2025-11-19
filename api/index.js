@@ -7,6 +7,7 @@ const GIST_ID = process.env.GIST_ID;
 const CACHE_TTL = 15 * 60 * 1000; // 15分钟缓存
 const ACCESS_LOG_FILE = 'rssjumper-access-log.json'; // 访问记录文件名
 const BLACKLIST_FILE = 'rssjumper-blacklist.json'; // 黑名单文件名
+const BANNED_IPS_FILE = 'rssjumper-banned-ips.json'; // 封禁IP文件名
 
 // 管理后台密码（必须通过环境变量 PASSWORD 设置）
 const PASSWORD = process.env.PASSWORD;
@@ -16,11 +17,20 @@ if (PASSWORD) {
   console.log('[管理后台] ⚠️  未配置PASSWORD环境变量，管理后台将无法访问');
 }
 
+// 【第1步-C】频率限制配置
+const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 60; // 每分钟请求限制，默认60
+const BAN_DURATION = 5 * 60 * 1000; // 封禁时长：5分钟
+console.log(`[频率限制] 每分钟限制: ${RATE_LIMIT} 次请求`);
+
 // 【第4步】访问记录存储（内存）
 const accessLog = new Map(); // url -> { count, firstAccess, lastAccess }
 
 // 【第1步-B】黑名单存储（内存）
 const blacklist = new Set(); // 黑名单URL集合
+
+// 【第1步-C】IP访问记录和封禁列表（内存）
+const ipAccessLog = new Map(); // ip -> [timestamp1, timestamp2, ...]
+const bannedIPs = new Map(); // ip -> bannedUntil (timestamp)
 
 /**
  * 生成URL的MD5哈希值（用作缓存文件名）
@@ -302,6 +312,138 @@ async function removeFromBlacklist(url) {
 }
 
 /**
+ * 【第1步-C】从Gist加载封禁IP列表
+ */
+async function loadBannedIPs() {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    console.log('[频率限制] 未配置GITHUB_TOKEN或GIST_ID，跳过加载封禁IP');
+    return;
+  }
+
+  try {
+    console.log('[频率限制] 从Gist加载封禁IP列表...');
+
+    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      timeout: 5000
+    });
+
+    const file = response.data.files[BANNED_IPS_FILE];
+    if (file && file.content) {
+      const data = JSON.parse(file.content);
+      const now = Date.now();
+
+      // 加载封禁IP，同时清理过期的
+      Object.entries(data).forEach(([ip, bannedUntil]) => {
+        if (bannedUntil > now) {
+          bannedIPs.set(ip, bannedUntil);
+        }
+      });
+
+      console.log(`[频率限制] 加载成功，当前封禁 ${bannedIPs.size} 个IP`);
+    } else {
+      console.log('[频率限制] Gist中没有封禁IP文件');
+    }
+  } catch (error) {
+    console.log(`[频率限制] 加载封禁IP失败: ${error.message}`);
+  }
+}
+
+/**
+ * 【第1步-C】保存封禁IP到Gist
+ */
+async function saveBannedIPs() {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    return;
+  }
+
+  try {
+    console.log('[频率限制] 保存封禁IP到Gist...');
+
+    const data = Object.fromEntries(bannedIPs);
+
+    await axios.patch(
+      `https://api.github.com/gists/${GIST_ID}`,
+      {
+        files: {
+          [BANNED_IPS_FILE]: {
+            content: JSON.stringify(data, null, 2)
+          }
+        }
+      },
+      {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 5000
+      }
+    );
+
+    console.log('[频率限制] 封禁IP保存成功');
+  } catch (error) {
+    console.log(`[频率限制] 保存封禁IP失败: ${error.message}`);
+  }
+}
+
+/**
+ * 【第1步-C】检查IP频率限制
+ * @returns {boolean} true表示通过，false表示被限制
+ */
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const oneMinuteAgo = now - 60 * 1000;
+
+  // 检查是否在封禁列表中
+  if (bannedIPs.has(ip)) {
+    const bannedUntil = bannedIPs.get(ip);
+    if (bannedUntil > now) {
+      const remainingSeconds = Math.ceil((bannedUntil - now) / 1000);
+      console.log(`[频率限制] IP ${ip} 仍在封禁中，剩余 ${remainingSeconds} 秒`);
+      return false;
+    } else {
+      // 封禁时间已过，解除封禁
+      bannedIPs.delete(ip);
+      console.log(`[频率限制] IP ${ip} 封禁已解除`);
+    }
+  }
+
+  // 获取该IP的访问记录
+  if (!ipAccessLog.has(ip)) {
+    ipAccessLog.set(ip, []);
+  }
+
+  const accessTimes = ipAccessLog.get(ip);
+
+  // 清理1分钟前的记录
+  const recentAccess = accessTimes.filter(time => time > oneMinuteAgo);
+
+  // 检查是否超过限制
+  if (recentAccess.length >= RATE_LIMIT) {
+    // 超过限制，封禁5分钟
+    const bannedUntil = now + BAN_DURATION;
+    bannedIPs.set(ip, bannedUntil);
+    console.log(`[频率限制] IP ${ip} 超过限制 (${recentAccess.length}/${RATE_LIMIT})，封禁5分钟`);
+
+    // 异步保存到Gist
+    saveBannedIPs().catch(err => {
+      console.log(`[频率限制] 保存封禁IP失败: ${err.message}`);
+    });
+
+    return false;
+  }
+
+  // 记录本次访问
+  recentAccess.push(now);
+  ipAccessLog.set(ip, recentAccess);
+
+  return true;
+}
+
+/**
  * 【第1步-A】获取Gist中的所有缓存文件列表
  */
 async function getCacheFilesList() {
@@ -567,6 +709,13 @@ loadBlacklist().catch(err => {
 });
 
 /**
+ * 【第1步-C】启动时加载封禁IP列表（异步，不阻塞）
+ */
+loadBannedIPs().catch(err => {
+  console.log(`[频率限制] 启动加载封禁IP失败: ${err.message}`);
+});
+
+/**
  * 主处理函数
  */
 module.exports = async (req, res) => {
@@ -601,6 +750,20 @@ module.exports = async (req, res) => {
       }
 
       console.log(`[请求] RSS代理: ${targetUrl}`);
+
+      // 【第1步-C】获取客户端IP并检查频率限制
+      const clientIP = req.headers['x-forwarded-for']?.split(',')[0] ||
+                      req.headers['x-real-ip'] ||
+                      req.connection?.remoteAddress ||
+                      'unknown';
+
+      if (!checkRateLimit(clientIP)) {
+        res.status(429).json({
+          error: '请求过于频繁',
+          message: `您的IP已被暂时封禁，请稍后再试`
+        });
+        return;
+      }
 
       // 验证URL
       if (!isValidUrl(targetUrl)) {
