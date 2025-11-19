@@ -82,14 +82,45 @@ function saveAccessLog() {
     try {
       console.log('[访问记录] 保存到Gist...');
 
-      const data = Object.fromEntries(accessLog);
+      // 【修复】先从Gist读取现有数据，合并后再保存
+      let existingData = {};
+      try {
+        const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          },
+          timeout: 5000
+        });
+
+        const file = response.data.files[ACCESS_LOG_FILE];
+        if (file && file.content) {
+          existingData = JSON.parse(file.content);
+        }
+      } catch (error) {
+        console.log('[访问记录] 读取现有数据失败，将创建新文件');
+      }
+
+      // 合并数据：将内存中的数据合并到现有数据
+      const memoryData = Object.fromEntries(accessLog);
+      Object.entries(memoryData).forEach(([url, record]) => {
+        if (existingData[url]) {
+          // URL已存在，累加访问次数
+          existingData[url].count += record.count;
+          existingData[url].lastAccess = Math.max(existingData[url].lastAccess, record.lastAccess);
+          existingData[url].firstAccess = Math.min(existingData[url].firstAccess, record.firstAccess);
+        } else {
+          // 新URL
+          existingData[url] = record;
+        }
+      });
 
       await axios.patch(
         `https://api.github.com/gists/${GIST_ID}`,
         {
           files: {
             [ACCESS_LOG_FILE]: {
-              content: JSON.stringify(data, null, 2)
+              content: JSON.stringify(existingData, null, 2)
             }
           }
         },
