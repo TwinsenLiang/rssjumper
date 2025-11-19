@@ -1,10 +1,128 @@
 const axios = require('axios');
+const crypto = require('crypto');
+
+// GitHub Gist配置（用于缓存）
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GIST_ID = process.env.GIST_ID;
+const CACHE_TTL = 15 * 60 * 1000; // 15分钟缓存
+
+/**
+ * 生成URL的MD5哈希值（用作缓存文件名）
+ */
+function getUrlHash(url) {
+  return crypto.createHash('md5').update(url).digest('hex');
+}
+
+/**
+ * 【第3步】从Gist读取RSS缓存
+ */
+async function readRSSCacheFromGist(targetUrl) {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    console.log('[Gist缓存] 未配置GITHUB_TOKEN或GIST_ID，跳过');
+    return null;
+  }
+
+  const cacheKey = `rss-cache-${getUrlHash(targetUrl)}.json`;
+
+  try {
+    console.log(`[Gist缓存] 尝试读取缓存: ${cacheKey}`);
+
+    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      timeout: 5000
+    });
+
+    const file = response.data.files[cacheKey];
+    if (!file || !file.content) {
+      console.log('[Gist缓存] 缓存不存在');
+      return null;
+    }
+
+    const cache = JSON.parse(file.content);
+    const now = Date.now();
+
+    // 检查是否过期
+    if (cache.expiresAt && cache.expiresAt > now) {
+      console.log(`[Gist缓存] 命中！剩余时间: ${Math.round((cache.expiresAt - now) / 1000)}秒`);
+      return {
+        data: cache.content,
+        fromCache: true
+      };
+    } else {
+      console.log('[Gist缓存] 已过期');
+      return null;
+    }
+  } catch (error) {
+    console.log(`[Gist缓存] 读取失败: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * 【第3步】将RSS缓存写入Gist
+ */
+async function writeRSSCacheToGist(targetUrl, content) {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    console.log('[Gist缓存] 未配置，跳过写入');
+    return;
+  }
+
+  const cacheKey = `rss-cache-${getUrlHash(targetUrl)}.json`;
+  const now = Date.now();
+
+  const cacheData = {
+    url: targetUrl,
+    content: content,
+    cachedAt: now,
+    expiresAt: now + CACHE_TTL
+  };
+
+  try {
+    console.log(`[Gist缓存] 写入缓存: ${cacheKey}`);
+
+    await axios.patch(
+      `https://api.github.com/gists/${GIST_ID}`,
+      {
+        files: {
+          [cacheKey]: {
+            content: JSON.stringify(cacheData, null, 2)
+          }
+        }
+      },
+      {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 5000
+      }
+    );
+
+    console.log('[Gist缓存] 写入成功');
+  } catch (error) {
+    console.log(`[Gist缓存] 写入失败: ${error.message}`);
+  }
+}
 
 /**
  * 【第1步】独立的RSS代理函数
  * 功能：抓取RSS源并返回，不受任何其他功能干扰
+ * 【第3步】增强：支持Gist缓存
  */
 async function proxyRSS(targetUrl) {
+  // 【第3步】先尝试从Gist读取缓存
+  const cachedResult = await readRSSCacheFromGist(targetUrl);
+  if (cachedResult) {
+    return {
+      success: true,
+      data: cachedResult.data,
+      contentType: 'application/xml; charset=utf-8',
+      fromCache: true
+    };
+  }
   try {
     console.log(`[RSS代理] 开始抓取: ${targetUrl}`);
 
@@ -22,10 +140,16 @@ async function proxyRSS(targetUrl) {
 
     console.log(`[RSS代理] 抓取成功，大小: ${response.data.length} 字节`);
 
+    // 【第3步】异步写入Gist缓存（不阻塞响应）
+    writeRSSCacheToGist(targetUrl, response.data).catch(err => {
+      console.log(`[Gist缓存] 异步写入失败: ${err.message}`);
+    });
+
     return {
       success: true,
       data: response.data,
-      contentType: response.headers['content-type'] || 'application/xml; charset=utf-8'
+      contentType: response.headers['content-type'] || 'application/xml; charset=utf-8',
+      fromCache: false
     };
   } catch (error) {
     console.error(`[RSS代理] 抓取失败:`, error.message);
@@ -134,6 +258,8 @@ module.exports = async (req, res) => {
       // 设置响应头
       res.setHeader('Content-Type', result.contentType);
       res.setHeader('X-RSSJumper-Status', result.success ? 'success' : 'error');
+      // 【第3步】添加缓存状态响应头
+      res.setHeader('X-RSSJumper-Cache', result.fromCache ? 'HIT' : 'MISS');
 
       // 返回RSS内容
       res.status(200).send(result.data);
