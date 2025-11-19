@@ -1,16 +1,129 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
-// GitHub Gist配置（用于缓存）
+// GitHub Gist配置（用于缓存和访问记录）
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GIST_ID = process.env.GIST_ID;
 const CACHE_TTL = 15 * 60 * 1000; // 15分钟缓存
+const ACCESS_LOG_FILE = 'rssjumper-access-log.json'; // 访问记录文件名
+
+// 【第4步】访问记录存储（内存）
+const accessLog = new Map(); // url -> { count, firstAccess, lastAccess }
+let accessLogSaveTimer = null; // 防抖定时器
+let accessLogChanged = false; // 数据是否已变更
 
 /**
  * 生成URL的MD5哈希值（用作缓存文件名）
  */
 function getUrlHash(url) {
   return crypto.createHash('md5').update(url).digest('hex');
+}
+
+/**
+ * 【第4步】从Gist加载访问记录
+ */
+async function loadAccessLog() {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    console.log('[访问记录] 未配置GITHUB_TOKEN或GIST_ID，跳过加载');
+    return;
+  }
+
+  try {
+    console.log('[访问记录] 从Gist加载访问记录...');
+
+    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      timeout: 5000
+    });
+
+    const file = response.data.files[ACCESS_LOG_FILE];
+    if (file && file.content) {
+      const data = JSON.parse(file.content);
+      Object.entries(data).forEach(([url, record]) => {
+        accessLog.set(url, record);
+      });
+      console.log(`[访问记录] 加载成功，共 ${accessLog.size} 条记录`);
+    } else {
+      console.log('[访问记录] Gist中没有访问记录文件');
+    }
+  } catch (error) {
+    console.log(`[访问记录] 加载失败: ${error.message}`);
+  }
+}
+
+/**
+ * 【第4步】保存访问记录到Gist（带60秒防抖）
+ */
+function saveAccessLog() {
+  accessLogChanged = true;
+
+  // 清除旧定时器
+  if (accessLogSaveTimer) {
+    clearTimeout(accessLogSaveTimer);
+  }
+
+  // 60秒后批量保存
+  accessLogSaveTimer = setTimeout(async () => {
+    if (!accessLogChanged || !GITHUB_TOKEN || !GIST_ID) {
+      return;
+    }
+
+    try {
+      console.log('[访问记录] 保存到Gist...');
+
+      const data = Object.fromEntries(accessLog);
+
+      await axios.patch(
+        `https://api.github.com/gists/${GIST_ID}`,
+        {
+          files: {
+            [ACCESS_LOG_FILE]: {
+              content: JSON.stringify(data, null, 2)
+            }
+          }
+        },
+        {
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          },
+          timeout: 5000
+        }
+      );
+
+      console.log('[访问记录] 保存成功');
+      accessLogChanged = false;
+    } catch (error) {
+      console.log(`[访问记录] 保存失败: ${error.message}`);
+    }
+  }, 60000); // 60秒防抖
+}
+
+/**
+ * 【第4步】记录一次访问
+ */
+function recordAccess(url) {
+  const now = Date.now();
+
+  if (accessLog.has(url)) {
+    const record = accessLog.get(url);
+    record.count++;
+    record.lastAccess = now;
+  } else {
+    accessLog.set(url, {
+      count: 1,
+      firstAccess: now,
+      lastAccess: now
+    });
+  }
+
+  console.log(`[访问记录] ${url} - 访问次数: ${accessLog.get(url).count}`);
+
+  // 触发保存（带防抖）
+  saveAccessLog();
 }
 
 /**
@@ -111,8 +224,12 @@ async function writeRSSCacheToGist(targetUrl, content) {
  * 【第1步】独立的RSS代理函数
  * 功能：抓取RSS源并返回，不受任何其他功能干扰
  * 【第3步】增强：支持Gist缓存
+ * 【第4步】增强：记录访问历史
  */
 async function proxyRSS(targetUrl) {
+  // 【第4步】记录访问
+  recordAccess(targetUrl);
+
   // 【第3步】先尝试从Gist读取缓存
   const cachedResult = await readRSSCacheFromGist(targetUrl);
   if (cachedResult) {
@@ -207,6 +324,13 @@ function isValidUrl(url) {
     return false;
   }
 }
+
+/**
+ * 【第4步】启动时加载访问记录（异步，不阻塞）
+ */
+loadAccessLog().catch(err => {
+  console.log(`[访问记录] 启动加载失败: ${err.message}`);
+});
 
 /**
  * 主处理函数
