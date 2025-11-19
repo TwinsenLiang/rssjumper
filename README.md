@@ -341,33 +341,53 @@ vercel dev
 const PASSWORD = process.env.PASSWORD || '你的新密码'; // 请修改为您的密码
 ```
 
-**配置文件方式**
+**本地测试环境变量配置**
 
-也可以复制 `.env.example` 为 `.env` 并修改：
+也可以复制 `.env.example` 为 `.env` 并修改（仅用于本地测试）：
 
 ```bash
 cp .env.example .env
-# 编辑 .env 文件中的配置
+# 编辑 .env 文件，添加以下配置：
+# PASSWORD=你的密码
+# RATE_LIMIT=5
 ```
+
+注意：`.env` 文件仅在本地开发时生效，Vercel部署需要在Dashboard中配置环境变量。
 
 ### 修改频率限制
 
-编辑 `api/index.js` 文件第12-13行：
+**方法1：使用环境变量（推荐）**
+
+在Vercel项目设置中添加环境变量：
+1. 进入Vercel Dashboard → 你的项目 → Settings → Environment Variables
+2. 添加：`RATE_LIMIT` = `5`（表示每分钟最多5次访问）
+3. 重新部署项目生效
+
+**方法2：直接修改代码**
+
+编辑 `api/index.js` 文件第10行：
 
 ```javascript
-const RATE_LIMIT = 5; // 改为5次/分钟
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1分钟（60000毫秒）
+const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 5; // 改为5次/分钟
 ```
 
 ### 修改缓存时间
 
-编辑 `api/index.js` 文件第14行：
+编辑 `api/index.js` 文件第12行：
 
 ```javascript
 const CACHE_TTL = 10 * 60 * 1000; // 改为10分钟
 ```
 
-修改后需要重新部署：
+### 配置修改后如何生效
+
+**如果修改环境变量：**
+1. 在Vercel Dashboard中修改环境变量后
+2. 点击项目的 **Deployments** 标签
+3. 点击最新部署右侧的三个点 → **Redeploy**
+4. 或者等待下次代码提交时自动部署
+
+**如果修改代码：**
 
 ```bash
 git add .
