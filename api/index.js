@@ -6,6 +6,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GIST_ID = process.env.GIST_ID;
 const CACHE_TTL = 15 * 60 * 1000; // 15分钟缓存
 const ACCESS_LOG_FILE = 'rssjumper-access-log.json'; // 访问记录文件名
+const BLACKLIST_FILE = 'rssjumper-blacklist.json'; // 黑名单文件名
 
 // 管理后台密码（必须通过环境变量 PASSWORD 设置）
 const PASSWORD = process.env.PASSWORD;
@@ -17,6 +18,9 @@ if (PASSWORD) {
 
 // 【第4步】访问记录存储（内存）
 const accessLog = new Map(); // url -> { count, firstAccess, lastAccess }
+
+// 【第1步-B】黑名单存储（内存）
+const blacklist = new Set(); // 黑名单URL集合
 
 /**
  * 生成URL的MD5哈希值（用作缓存文件名）
@@ -190,6 +194,97 @@ async function getAccessLogFromGist() {
 }
 
 /**
+ * 【第1步-B】从Gist加载黑名单
+ */
+async function loadBlacklist() {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    console.log('[黑名单] 未配置GITHUB_TOKEN或GIST_ID，跳过加载');
+    return;
+  }
+
+  try {
+    console.log('[黑名单] 从Gist加载黑名单...');
+
+    const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      timeout: 5000
+    });
+
+    const file = response.data.files[BLACKLIST_FILE];
+    if (file && file.content) {
+      const data = JSON.parse(file.content);
+      data.urls.forEach(url => blacklist.add(url));
+      console.log(`[黑名单] 加载成功，共 ${blacklist.size} 条记录`);
+    } else {
+      console.log('[黑名单] Gist中没有黑名单文件');
+    }
+  } catch (error) {
+    console.log(`[黑名单] 加载失败: ${error.message}`);
+  }
+}
+
+/**
+ * 【第1步-B】保存黑名单到Gist
+ */
+async function saveBlacklist() {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    return;
+  }
+
+  try {
+    console.log('[黑名单] 保存到Gist...');
+
+    const data = {
+      urls: Array.from(blacklist),
+      updatedAt: Date.now()
+    };
+
+    await axios.patch(
+      `https://api.github.com/gists/${GIST_ID}`,
+      {
+        files: {
+          [BLACKLIST_FILE]: {
+            content: JSON.stringify(data, null, 2)
+          }
+        }
+      },
+      {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 5000
+      }
+    );
+
+    console.log('[黑名单] 保存成功');
+  } catch (error) {
+    console.log(`[黑名单] 保存失败: ${error.message}`);
+  }
+}
+
+/**
+ * 【第1步-B】添加URL到黑名单
+ */
+async function addToBlacklist(url) {
+  blacklist.add(url);
+  await saveBlacklist();
+  console.log(`[黑名单] 已添加: ${url}`);
+}
+
+/**
+ * 【第1步-B】从黑名单移除URL
+ */
+async function removeFromBlacklist(url) {
+  blacklist.delete(url);
+  await saveBlacklist();
+  console.log(`[黑名单] 已移除: ${url}`);
+}
+
+/**
  * 【第1步-A】获取Gist中的所有缓存文件列表
  */
 async function getCacheFilesList() {
@@ -225,7 +320,8 @@ async function getCacheFilesList() {
             cachedAt: new Date(content.cachedAt).toLocaleString('zh-CN'),
             expiresAt: new Date(content.expiresAt).toLocaleString('zh-CN'),
             age: Math.floor(age / 1000 / 60) + '分钟前',
-            expired: expired
+            expired: expired,
+            blacklisted: blacklist.has(content.url) // 【第1步-B】黑名单状态
           });
         } catch (e) {
           // 解析失败跳过
@@ -447,6 +543,13 @@ loadAccessLog().catch(err => {
 });
 
 /**
+ * 【第1步-B】启动时加载黑名单（异步，不阻塞）
+ */
+loadBlacklist().catch(err => {
+  console.log(`[黑名单] 启动加载失败: ${err.message}`);
+});
+
+/**
  * 主处理函数
  */
 module.exports = async (req, res) => {
@@ -487,6 +590,16 @@ module.exports = async (req, res) => {
         res.status(400).json({
           error: '无效的URL',
           message: '只支持http/https协议，不支持访问内网地址'
+        });
+        return;
+      }
+
+      // 【第1步-B】检查黑名单
+      if (blacklist.has(targetUrl)) {
+        console.log(`[黑名单] 拒绝访问: ${targetUrl}`);
+        res.status(403).json({
+          error: '该RSS源已被禁用',
+          message: '此RSS源在黑名单中，无法访问'
         });
         return;
       }
@@ -543,6 +656,22 @@ module.exports = async (req, res) => {
                   totalCached: cacheFiles.length
                 }
               });
+            } else if (data.action === 'addBlacklist') {
+              // 【第1步-B】添加到黑名单
+              if (!data.url) {
+                res.status(400).json({ success: false, message: '缺少URL参数' });
+                return;
+              }
+              await addToBlacklist(data.url);
+              res.status(200).json({ success: true, message: '已添加到黑名单' });
+            } else if (data.action === 'removeBlacklist') {
+              // 【第1步-B】从黑名单移除
+              if (!data.url) {
+                res.status(400).json({ success: false, message: '缺少URL参数' });
+                return;
+              }
+              await removeFromBlacklist(data.url);
+              res.status(200).json({ success: true, message: '已从黑名单移除' });
             } else {
               res.status(400).json({ success: false, message: '未知操作' });
             }
@@ -661,6 +790,29 @@ module.exports = async (req, res) => {
     .refresh-btn:hover {
       background: #5568d3;
     }
+    .action-btn {
+      padding: 5px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .block-btn {
+      background: #dc3545;
+      color: white;
+    }
+    .block-btn:hover {
+      background: #c82333;
+    }
+    .unblock-btn {
+      background: #28a745;
+      color: white;
+    }
+    .unblock-btn:hover {
+      background: #218838;
+    }
   </style>
 </head>
 <body>
@@ -734,7 +886,7 @@ module.exports = async (req, res) => {
 
         // 更新缓存文件表格
         const cacheFilesHtml = data.cacheFiles.length > 0 ?
-          '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>过期时间</th><th>状态</th></tr></thead><tbody>' +
+          '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>过期时间</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
           data.cacheFiles.map(file =>
             '<tr>' +
             '<td class="url-cell" title="' + file.url + '">' + file.url + '</td>' +
@@ -743,6 +895,11 @@ module.exports = async (req, res) => {
             '<td>' + file.expiresAt + '</td>' +
             '<td class="' + (file.expired ? 'expired' : 'valid') + '">' +
               (file.expired ? '已过期' : '有效') +
+            '</td>' +
+            '<td>' +
+              (file.blacklisted ?
+                '<button class="action-btn unblock-btn" onclick="toggleBlacklist(\'' + file.url + '\', false)">解绑</button>' :
+                '<button class="action-btn block-btn" onclick="toggleBlacklist(\'' + file.url + '\', true)">加黑</button>') +
             '</td>' +
             '</tr>'
           ).join('') +
@@ -753,6 +910,28 @@ module.exports = async (req, res) => {
 
       } catch (error) {
         alert('加载数据失败: ' + error.message);
+      }
+    }
+
+    // 【第1步-B】切换黑名单状态
+    async function toggleBlacklist(url, addToBlacklist) {
+      try {
+        const action = addToBlacklist ? 'addBlacklist' : 'removeBlacklist';
+        const response = await fetch('/?password=' + encodeURIComponent(password), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, url })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert(result.message);
+          loadData(); // 刷新数据
+        } else {
+          alert('操作失败: ' + result.message);
+        }
+      } catch (error) {
+        alert('操作失败: ' + error.message);
       }
     }
 
