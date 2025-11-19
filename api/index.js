@@ -102,6 +102,13 @@ async function saveAccessLog() {
         existingData[url].count += record.count;
         existingData[url].lastAccess = Math.max(existingData[url].lastAccess, record.lastAccess);
         existingData[url].firstAccess = Math.min(existingData[url].firstAccess, record.firstAccess);
+        // 合并每日访问数据
+        if (record.daily) {
+          if (!existingData[url].daily) existingData[url].daily = {};
+          Object.entries(record.daily).forEach(([date, count]) => {
+            existingData[url].daily[date] = (existingData[url].daily[date] || 0) + count;
+          });
+        }
       } else {
         // 新URL
         existingData[url] = record;
@@ -137,16 +144,23 @@ async function saveAccessLog() {
  */
 function recordAccess(url) {
   const now = Date.now();
+  const today = new Date(now).toLocaleDateString('zh-CN');
 
   if (accessLog.has(url)) {
     const record = accessLog.get(url);
     record.count++;
     record.lastAccess = now;
+    // 记录今日访问次数
+    if (!record.daily) record.daily = {};
+    record.daily[today] = (record.daily[today] || 0) + 1;
   } else {
     accessLog.set(url, {
       count: 1,
       firstAccess: now,
-      lastAccess: now
+      lastAccess: now,
+      daily: {
+        [today]: 1
+      }
     });
   }
 
@@ -181,9 +195,11 @@ async function getAccessLogFromGist() {
     }
 
     const data = JSON.parse(file.content);
+    const today = new Date().toLocaleDateString('zh-CN');
+
     return Object.entries(data).map(([url, record]) => ({
       url,
-      count: record.count,
+      count: (record.daily && record.daily[today]) || 0, // 今日访问次数
       firstAccess: new Date(record.firstAccess).toLocaleString('zh-CN'),
       lastAccess: new Date(record.lastAccess).toLocaleString('zh-CN'),
       blacklisted: blacklist.has(url) // 【第1步-B】添加黑名单状态
@@ -778,19 +794,6 @@ module.exports = async (req, res) => {
       padding: 40px;
       color: #999;
     }
-    .refresh-btn {
-      background: #667eea;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 14px;
-      margin-bottom: 15px;
-    }
-    .refresh-btn:hover {
-      background: #5568d3;
-    }
     .action-btn {
       padding: 5px 12px;
       border: none;
@@ -814,6 +817,35 @@ module.exports = async (req, res) => {
     .unblock-btn:hover {
       background: #218838;
     }
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #e0e0e0;
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      padding: 12px 24px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      color: #666;
+      border-bottom: 3px solid transparent;
+      transition: all 0.3s;
+    }
+    .tab-btn:hover {
+      color: #667eea;
+    }
+    .tab-btn.active {
+      color: #667eea;
+      border-bottom-color: #667eea;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -832,17 +864,21 @@ module.exports = async (req, res) => {
     </div>
 
     <div class="section">
-      <h2>📊 访问记录</h2>
-      <button class="refresh-btn" onclick="loadData()">🔄 刷新数据</button>
-      <div id="access-log-table">
-        <div class="loading">正在加载...</div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('access-log')">📊 访问记录</button>
+        <button class="tab-btn" onclick="switchTab('cache-files')">💾 缓存文件</button>
       </div>
-    </div>
 
-    <div class="section">
-      <h2>💾 缓存文件</h2>
-      <div id="cache-files-table">
-        <div class="loading">正在加载...</div>
+      <div id="access-log-tab" class="tab-content active">
+        <div id="access-log-table">
+          <div class="loading">正在加载...</div>
+        </div>
+      </div>
+
+      <div id="cache-files-tab" class="tab-content">
+        <div id="cache-files-table">
+          <div class="loading">正在加载...</div>
+        </div>
       </div>
     </div>
   </div>
@@ -855,6 +891,17 @@ module.exports = async (req, res) => {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    // Tab切换函数
+    function switchTab(tabName) {
+      // 移除所有active类
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      // 添加active类到当前tab
+      event.target.classList.add('active');
+      document.getElementById(tabName + '-tab').classList.add('active');
     }
 
     async function loadData() {
@@ -878,7 +925,7 @@ module.exports = async (req, res) => {
 
         // 更新访问记录表格
         const accessLogHtml = data.logs.length > 0 ?
-          '<table><thead><tr><th>RSS URL</th><th>访问次数</th><th>首次访问</th><th>最后访问</th><th>操作</th></tr></thead><tbody>' +
+          '<table><thead><tr><th>RSS URL</th><th>今日访问次数</th><th>首次访问</th><th>最后访问</th><th>操作</th></tr></thead><tbody>' +
           data.logs.map(log => {
             const escapedUrl = escapeHtml(log.url);
             return '<tr>' +
