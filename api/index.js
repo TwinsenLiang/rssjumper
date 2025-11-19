@@ -694,8 +694,8 @@ module.exports = async (req, res) => {
     - 请遵守目标网站的使用条款
   </div>
 
-  <h2>查看访问历史</h2>
-  <p>访问 <code>/?password=您的密码</code> 查看历史记录</p>
+  <h2>管理后台</h2>
+  <p>访问 <code>/api/admin?password=您的密码</code> 查看管理后台</p>
 </body>
 </html>
       `);

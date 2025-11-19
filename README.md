@@ -31,7 +31,7 @@ https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expres
 使用密码参数访问管理后台，查看和管理RSS代理服务：
 
 ```
-https://your-domain.vercel.app/?password=[你的密码]
+https://your-domain.vercel.app/api/admin?password=[你的密码]
 ```
 
 管理后台功能：
@@ -284,8 +284,8 @@ https://your-domain.vercel.app/
 # 测试代理RSS
 https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
 
-# 查看访问历史
-https://your-domain.vercel.app/?password=[你的密码]
+# 访问管理后台
+https://your-domain.vercel.app/api/admin?password=[你的密码]
 ```
 
 ## 🔧 本地开发测试（可选）
