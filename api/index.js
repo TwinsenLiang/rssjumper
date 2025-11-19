@@ -159,10 +159,38 @@ async function saveBlacklist() {
   await updateGistFile(GIST_BLACKLIST_FILE, data);
 }
 
-// 启动时加载持久化数据（异步执行，不阻塞函数启动）
-(async () => {
-  await Promise.all([loadAccessLog(), loadBlacklist()]);
-})();
+// 数据加载状态
+let dataLoaded = false;
+let dataLoading = false;
+
+/**
+ * 懒加载持久化数据（首次请求时加载，带超时保护）
+ */
+async function ensureDataLoaded() {
+  if (dataLoaded || dataLoading) {
+    return;
+  }
+
+  dataLoading = true;
+
+  try {
+    // 5秒超时保护，避免阻塞请求
+    await Promise.race([
+      Promise.all([loadAccessLog(), loadBlacklist()]),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Gist加载超时')), 5000)
+      )
+    ]);
+    dataLoaded = true;
+    console.log('持久化数据加载成功');
+  } catch (error) {
+    console.warn('持久化数据加载失败，使用内存存储:', error.message);
+    // 加载失败不影响服务，继续使用内存存储
+    dataLoaded = true; // 标记为已加载，避免重试
+  } finally {
+    dataLoading = false;
+  }
+}
 
 /**
  * 生成URL的hash作为缓存文件名
@@ -415,6 +443,11 @@ module.exports = async (req, res) => {
     res.status(405).json({ error: '只允许GET和POST请求' });
     return;
   }
+
+  // 懒加载持久化数据（不阻塞关键请求）
+  ensureDataLoaded().catch(err => {
+    console.error('数据加载异常:', err.message);
+  });
 
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
