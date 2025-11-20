@@ -814,51 +814,50 @@ module.exports = async (req, res) => {
 
       // 处理POST请求（获取数据）
       if (req.method === 'POST') {
-        let body = '';
-        req.on('data', chunk => body += chunk);
-        req.on('end', async () => {
-          try {
-            const data = JSON.parse(body);
+        try {
+          // 使用server.js已经解析好的req.body（Render环境）
+          // 或者读取请求流（Vercel环境）
+          const data = req.body || {};
 
-            if (data.action === 'getData') {
-              // 从Gist读取访问记录（而不是从内存Map读取）
-              const logs = await getAccessLogFromGist();
+          if (data.action === 'getData') {
+            // 从Gist读取访问记录（而不是从内存Map读取）
+            const logs = await getAccessLogFromGist();
 
-              // 获取缓存列表
-              const cacheFiles = await getCacheFilesList();
+            // 获取缓存列表
+            const cacheFiles = await getCacheFilesList();
 
-              res.status(200).json({
-                success: true,
-                logs,
-                cacheFiles,
-                stats: {
-                  totalAccess: logs.length,
-                  totalCached: cacheFiles.length
-                }
-              });
-            } else if (data.action === 'addBlacklist') {
-              // 【第1步-B】添加到黑名单
-              if (!data.url) {
-                res.status(400).json({ success: false, message: '缺少URL参数' });
-                return;
+            res.status(200).json({
+              success: true,
+              logs,
+              cacheFiles,
+              stats: {
+                totalAccess: logs.length,
+                totalCached: cacheFiles.length
               }
-              await addToBlacklist(data.url);
-              res.status(200).json({ success: true, message: '已添加到黑名单' });
-            } else if (data.action === 'removeBlacklist') {
-              // 【第1步-B】从黑名单移除
-              if (!data.url) {
-                res.status(400).json({ success: false, message: '缺少URL参数' });
-                return;
-              }
-              await removeFromBlacklist(data.url);
-              res.status(200).json({ success: true, message: '已从黑名单移除' });
-            } else {
-              res.status(400).json({ success: false, message: '未知操作' });
+            });
+          } else if (data.action === 'addBlacklist') {
+            // 【第1步-B】添加到黑名单
+            if (!data.url) {
+              res.status(400).json({ success: false, message: '缺少URL参数' });
+              return;
             }
-          } catch (error) {
-            res.status(400).json({ success: false, message: '请求数据格式错误' });
+            await addToBlacklist(data.url);
+            res.status(200).json({ success: true, message: '已添加到黑名单' });
+          } else if (data.action === 'removeBlacklist') {
+            // 【第1步-B】从黑名单移除
+            if (!data.url) {
+              res.status(400).json({ success: false, message: '缺少URL参数' });
+              return;
+            }
+            await removeFromBlacklist(data.url);
+            res.status(200).json({ success: true, message: '已从黑名单移除' });
+          } else {
+            res.status(400).json({ success: false, message: '未知操作' });
           }
-        });
+        } catch (error) {
+          console.error('[管理后台] POST请求处理错误:', error);
+          res.status(400).json({ success: false, message: '请求数据格式错误: ' + error.message });
+        }
         return;
       }
 
