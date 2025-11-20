@@ -183,6 +183,46 @@ function recordAccess(url) {
 }
 
 /**
+ * 清零访问记录
+ */
+async function resetAccessLog() {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    return;
+  }
+
+  try {
+    console.log('[访问记录] 清零访问记录...');
+
+    // 清空内存中的访问记录
+    accessLog.clear();
+
+    // 清空Gist中的访问记录文件
+    await axios.patch(
+      `https://api.github.com/gists/${GIST_ID}`,
+      {
+        files: {
+          [ACCESS_LOG_FILE]: {
+            content: JSON.stringify({}, null, 2)
+          }
+        }
+      },
+      {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 5000
+      }
+    );
+
+    console.log('[访问记录] 清零成功');
+  } catch (error) {
+    console.log(`[访问记录] 清零失败: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
  * 从Gist读取访问记录（用于管理后台显示）
  */
 async function getAccessLogFromGist() {
@@ -833,6 +873,10 @@ module.exports = async (req, res) => {
             }
             await removeFromBlacklist(data.url);
             res.status(200).json({ success: true, message: '已从黑名单移除' });
+          } else if (data.action === 'resetAccessCount') {
+            // 清零访问记录
+            await resetAccessLog();
+            res.status(200).json({ success: true, message: '访问记录已清零' });
           } else {
             res.status(400).json({ success: false, message: '未知操作' });
           }
@@ -859,8 +903,13 @@ module.exports = async (req, res) => {
 
     <div class="stats">
       <div class="stat-card">
-        <div class="stat-value" id="stat-access">-</div>
-        <div class="stat-label">今日访问总数</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <div>
+            <div class="stat-value" id="stat-access">-</div>
+            <div class="stat-label">今日访问总数</div>
+          </div>
+          <button onclick="resetAccessCount()" style="background: none; border: none; cursor: pointer; font-size: 1.5em; padding: 10px; color: #dc3545; transition: transform 0.2s;" title="清零访问记录" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">🔄</button>
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-value" id="stat-cache">-</div>
@@ -985,6 +1034,31 @@ module.exports = async (req, res) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, url })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert(result.message);
+          loadData(); // 刷新数据
+        } else {
+          alert('操作失败: ' + result.message);
+        }
+      } catch (error) {
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 清零访问记录
+    async function resetAccessCount() {
+      if (!confirm('确定要清零所有访问记录吗？此操作不可恢复！')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/?password=' + encodeURIComponent(password), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'resetAccessCount' })
         });
 
         const result = await response.json();
@@ -1140,7 +1214,7 @@ module.exports = async (req, res) => {
         <strong>示例：</strong><br>
         <code>https://your-domain.com/?url=https://example.com/rss/feed.xml</code>
       </div>
-      <p style="margin-top: 10px; color: #999; font-size: 0.9em;">
+      <p style="margin-top: 10px; color: #999; font-size: 0.9em;text-align: center;">
         ⚠️ 注意：此服务仅支持RSS/Atom订阅源，不支持普通网页
       </p>
     </div>
