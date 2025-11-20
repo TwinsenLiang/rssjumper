@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: rssjumper
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GIST_ID
+        sync: false
+      - key: PASSWORD
+        sync: false
+      - key: RATE_LIMIT
+        value: 60
+    healthCheckPath: /

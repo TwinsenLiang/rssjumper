@@ -4,6 +4,7 @@
   "description": "RSS proxy service for accessing blocked RSS feeds",
   "main": "api/index.js",
   "scripts": {
+    "start": "node server.js",
     "dev": "vercel dev",
     "deploy": "vercel --prod"
   },
