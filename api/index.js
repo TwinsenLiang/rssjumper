@@ -717,15 +717,15 @@ function generateUnavailableRSS(targetUrl) {
 }
 
 /**
- * 渐进式重试获取RSS（最多3次，超时时间递增：1秒、3秒、5秒）
+ * 渐进式重试获取RSS（最多3次，超时时间递增：3秒、8秒、15秒）
  * @param {string} targetUrl - RSS源URL
  * @returns {object|null} 成功返回RSS数据，失败返回null
  */
 async function fetchRSSWithRetry(targetUrl) {
   const retryConfig = [
-    { attempt: 1, timeout: 1000 },  // 第1次：1秒超时
-    { attempt: 2, timeout: 3000 },  // 第2次：3秒超时
-    { attempt: 3, timeout: 5000 }   // 第3次：5秒超时
+    { attempt: 1, timeout: 3000 },   // 第1次：3秒超时
+    { attempt: 2, timeout: 8000 },   // 第2次：8秒超时
+    { attempt: 3, timeout: 15000 }   // 第3次：15秒超时
   ];
 
   for (const config of retryConfig) {
@@ -735,12 +735,17 @@ async function fetchRSSWithRetry(targetUrl) {
       const response = await axios.get(targetUrl, {
         timeout: config.timeout,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; RSSJumper/1.0)',
-          'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/rss+xml, application/xml, text/xml, application/atom+xml, */*',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         },
         maxRedirects: 5,
         validateStatus: (status) => status >= 200 && status < 400,
-        responseType: 'text'
+        responseType: 'text',
+        decompress: true  // 自动解压gzip
       });
 
       console.log(`[RSS获取] 第 ${config.attempt} 次成功！大小: ${response.data.length} 字节`);
