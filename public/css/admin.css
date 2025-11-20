@@ -76,11 +76,18 @@ tr:hover {
   font-weight: 600;
 }
 
-/* 缓存状态颜色 */
+/* 缓存状态颜色（已废弃，改用按钮样式） */
 .cache-status-fresh {
   color: #28a745;
   font-weight: 600;
   background: #d4edda;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.cache-status-normal {
+  color: #007bff;
+  font-weight: 600;
+  background: #d1ecf1;
   padding: 4px 8px;
   border-radius: 4px;
 }
@@ -95,13 +102,6 @@ tr:hover {
   color: #dc3545;
   font-weight: 600;
   background: #f8d7da;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-.cache-status-updated {
-  color: #007bff;
-  font-weight: 600;
-  background: #d1ecf1;
   padding: 4px 8px;
   border-radius: 4px;
 }
@@ -124,6 +124,7 @@ tr:hover {
   font-size: 12px;
   font-weight: 600;
   transition: all 0.2s;
+  color: white;
 }
 .block-btn {
   background: #dc3545;
@@ -138,6 +139,13 @@ tr:hover {
 }
 .unblock-btn:hover {
   background: #218838;
+}
+.delete-btn {
+  background: #fd7e14;
+  color: white;
+}
+.delete-btn:hover {
+  background: #e66a00;
 }
 .tabs {
   display: flex;

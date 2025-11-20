@@ -1204,19 +1204,42 @@ module.exports = async (req, res) => {
 
         // 更新缓存文件表格
         const cacheFilesHtml = data.cacheFiles.length > 0 ?
-          '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>过期时间</th><th>状态</th></tr></thead><tbody>' +
+          '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>缓存年龄</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
           data.cacheFiles.map(file => {
             const escapedUrl = escapeHtml(file.url);
-            // 根据缓存状态显示不同颜色
-            // fresh: 绿色, stale: 橙色, unavailable: 红色
-            const statusClass = 'cache-status-' + file.cacheStatus;
+            const encodedUrl = encodeURIComponent(file.url);
+
+            // 生成四色状态按钮（样式与访问记录的操作按钮一致）
+            let statusButton = '';
+            switch(file.cacheStatus) {
+              case 'fresh':
+                // 新鲜 - 绿色，不可点击
+                statusButton = '<span class="action-btn" style="background: #28a745; cursor: default;">' + file.cacheStatusText + '</span>';
+                break;
+              case 'normal':
+                // 普通 - 蓝色，可点击
+                statusButton = '<button class="action-btn" style="background: #007bff;" onclick="refreshCache(\'' + encodedUrl + '\')">' + file.cacheStatusText + '</button>';
+                break;
+              case 'stale':
+                // 旧 - 黄色，可点击
+                statusButton = '<button class="action-btn" style="background: #ffc107; color: #000;" onclick="refreshCache(\'' + encodedUrl + '\')">' + file.cacheStatusText + '</button>';
+                break;
+              case 'unavailable':
+                // 失效 - 红色，可点击
+                statusButton = '<button class="action-btn" style="background: #dc3545;" onclick="refreshCache(\'' + encodedUrl + '\')">' + file.cacheStatusText + '</button>';
+                break;
+              default:
+                statusButton = '<span class="action-btn" style="background: #6c757d;">' + file.cacheStatusText + '</span>';
+            }
+
             return '<tr>' +
               '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
               '<td>' + (file.size / 1024).toFixed(2) + ' KB</td>' +
               '<td>' + file.cachedAt + '</td>' +
-              '<td>' + file.expiresAt + '</td>' +
-              '<td class="' + statusClass + '">' +
-                file.cacheStatusText +
+              '<td>' + file.age + '</td>' +
+              '<td>' + statusButton + '</td>' +
+              '<td>' +
+                '<button class="action-btn delete-btn" onclick="clearCache(\'' + encodedUrl + '\')">清除</button>' +
               '</td>' +
               '</tr>';
           }).join('') +
@@ -1271,6 +1294,58 @@ module.exports = async (req, res) => {
           loadData(); // 刷新数据
         } else {
           alert('操作失败: ' + result.message);
+        }
+      } catch (error) {
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 手动刷新缓存（拉取最新内容）
+    async function refreshCache(encodedUrl) {
+      const url = decodeURIComponent(encodedUrl);
+      if (!confirm('确定要手动拉取并更新这个URL的缓存吗？\n\n' + url)) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/?password=' + encodeURIComponent(password), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'refreshCache', url })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert('缓存更新成功！');
+          loadData(); // 刷新数据
+        } else {
+          alert('缓存更新失败: ' + (result.message || '未知错误'));
+        }
+      } catch (error) {
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 清除缓存
+    async function clearCache(encodedUrl) {
+      const url = decodeURIComponent(encodedUrl);
+      if (!confirm('确定要清除这个URL的缓存吗？\n\n' + url)) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/?password=' + encodeURIComponent(password), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clearCache', url })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert('缓存已清除！');
+          loadData(); // 刷新数据
+        } else {
+          alert('清除缓存失败: ' + (result.message || '未知错误'));
         }
       } catch (error) {
         alert('操作失败: ' + error.message);
