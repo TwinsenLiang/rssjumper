@@ -171,15 +171,47 @@ function generateAdminHTML() {
           cacheBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无缓存文件</td></tr>';
         } else {
           cacheBody.innerHTML = data.cacheFiles.map(function(cache) {
-            var statusBadge = cache.expired
-              ? '<span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded">已过期</span>'
-              : '<span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">有效</span>';
+            // 四色状态按钮
+            var statusButton = '';
+            var statusClass = '';
+            var statusText = cache.cacheStatusText;
+            var isClickable = cache.cacheStatus !== 'fresh';
+
+            // 根据状态设置不同的颜色样式
+            switch(cache.cacheStatus) {
+              case 'fresh':
+                // 新鲜 - 绿色，不可点击
+                statusClass = 'bg-green-100 text-green-800';
+                break;
+              case 'normal':
+                // 普通 - 蓝色，可点击
+                statusClass = 'bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200';
+                break;
+              case 'stale':
+                // 旧 - 黄色，可点击
+                statusClass = 'bg-yellow-100 text-yellow-800 cursor-pointer hover:bg-yellow-200';
+                break;
+              case 'unavailable':
+                // 失效 - 红色，可点击
+                statusClass = 'bg-red-100 text-red-800 cursor-pointer hover:bg-red-200';
+                break;
+              default:
+                statusClass = 'bg-gray-100 text-gray-800';
+            }
+
+            // 生成状态按钮
+            if (isClickable) {
+              statusButton = '<button onclick="refreshCache(' + "'" + encodeURIComponent(cache.url) + "'" + ')" class="px-2 py-1 text-xs font-medium rounded ' + statusClass + '">' + statusText + '</button>';
+            } else {
+              statusButton = '<span class="px-2 py-1 text-xs font-medium rounded ' + statusClass + '">' + statusText + '</span>';
+            }
+
             return '<tr class="hover:bg-gray-50">' +
               '<td class="px-6 py-4 text-sm text-gray-900 break-all max-w-md">' + cache.url + '</td>' +
               '<td class="px-6 py-4 text-sm text-gray-900">' + cache.size + '</td>' +
-              '<td class="px-6 py-4 text-sm text-gray-500">' + cache.lastModified + '</td>' +
+              '<td class="px-6 py-4 text-sm text-gray-500">' + cache.cachedAt + '</td>' +
               '<td class="px-6 py-4 text-sm text-gray-500">' + cache.age + '</td>' +
-              '<td class="px-6 py-4 text-sm">' + statusBadge + '</td>' +
+              '<td class="px-6 py-4 text-sm">' + statusButton + '</td>' +
               '<td class="px-6 py-4 text-sm">' +
               '<button onclick="clearCache(' + "'" + encodeURIComponent(cache.url) + "'" + ')" class="px-3 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600">清除</button>' +
               '</td>' +
@@ -242,6 +274,29 @@ function generateAdminHTML() {
         });
         const data = await response.json();
         alert(data.message);
+        refreshData();
+      } catch (error) {
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 手动刷新缓存（拉取最新内容）
+    async function refreshCache(encodedUrl) {
+      const url = decodeURIComponent(encodedUrl);
+      if (!confirm('确定要手动拉取并更新这个URL的缓存吗？\\n\\n' + url)) return;
+
+      try {
+        const response = await fetch('/?password=' + encodeURIComponent(password), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'refreshCache', url })
+        });
+        const data = await response.json();
+        if (data.success) {
+          alert('缓存更新成功！');
+        } else {
+          alert('缓存更新失败: ' + (data.message || '未知错误'));
+        }
         refreshData();
       } catch (error) {
         alert('操作失败: ' + error.message);

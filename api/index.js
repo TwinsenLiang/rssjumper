@@ -515,9 +515,9 @@ async function getCacheFilesList() {
           const age = now - content.cachedAt;
           const expired = age > CACHE_TTL;
 
-          // 判断缓存状态
+          // 判断缓存状态（四色状态）
           let cacheStatus = 'fresh';  // 默认新鲜
-          let cacheStatusText = '有效';
+          let cacheStatusText = '新鲜';
 
           // 检查是否是"不可用"占位符（通过检查RSS内容）
           const isUnavailable = content.content &&
@@ -525,12 +525,19 @@ async function getCacheFilesList() {
              content.content.includes('RSS已失效'));
 
           if (isUnavailable) {
+            // 状态4: RSS已失效（红色）
             cacheStatus = 'unavailable';
             cacheStatusText = 'RSS已失效';
           } else if (expired) {
+            // 状态3: 已过期（黄色）
             cacheStatus = 'stale';
-            cacheStatusText = '已过期但可用';
+            cacheStatusText = '旧';
+          } else if (age > CACHE_TTL / 2) {
+            // 状态2: 缓存已过半（蓝色）
+            cacheStatus = 'normal';
+            cacheStatusText = '普通';
           } else {
+            // 状态1: 新鲜（绿色）
             cacheStatus = 'fresh';
             cacheStatusText = '新鲜';
           }
@@ -741,6 +748,44 @@ async function writeRSSCacheToGist(targetUrl, content, contentType) {
     console.log('[Gist缓存] 写入成功');
   } catch (error) {
     console.log(`[Gist缓存] 写入失败: ${error.message}`);
+  }
+}
+
+/**
+ * 从Gist删除指定URL的RSS缓存
+ */
+async function deleteRSSCacheFromGist(targetUrl) {
+  if (!GITHUB_TOKEN || !GIST_ID) {
+    console.log('[Gist缓存] 未配置，跳过删除');
+    return false;
+  }
+
+  const cacheKey = `rss-cache-${getUrlHash(targetUrl)}.json`;
+
+  try {
+    console.log(`[Gist缓存] 删除缓存: ${cacheKey}`);
+
+    await axios.patch(
+      `https://api.github.com/gists/${GIST_ID}`,
+      {
+        files: {
+          [cacheKey]: null  // 设置为null表示删除
+        }
+      },
+      {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 5000
+      }
+    );
+
+    console.log('[Gist缓存] 删除成功');
+    return true;
+  } catch (error) {
+    console.log(`[Gist缓存] 删除失败: ${error.message}`);
+    return false;
   }
 }
 
@@ -1001,6 +1046,38 @@ module.exports = async (req, res) => {
             // 清零访问记录
             await resetAccessLog();
             res.status(200).json({ success: true, message: '访问记录已清零' });
+          } else if (data.action === 'clearCache') {
+            // 清除指定URL的缓存
+            if (!data.url) {
+              res.status(400).json({ success: false, message: '缺少URL参数' });
+              return;
+            }
+            const success = await deleteRSSCacheFromGist(data.url);
+            if (success) {
+              res.status(200).json({ success: true, message: '缓存已清除' });
+            } else {
+              res.status(500).json({ success: false, message: '清除缓存失败' });
+            }
+          } else if (data.action === 'refreshCache') {
+            // 手动刷新指定URL的缓存
+            if (!data.url) {
+              res.status(400).json({ success: false, message: '缺少URL参数' });
+              return;
+            }
+
+            // 先删除旧缓存
+            await deleteRSSCacheFromGist(data.url);
+
+            // 获取最新RSS
+            const fetchResult = await fetchRSSWithRetry(data.url);
+
+            if (fetchResult) {
+              // 写入新缓存
+              await writeRSSCacheToGist(data.url, fetchResult.content, fetchResult.contentType);
+              res.status(200).json({ success: true, message: '缓存更新成功' });
+            } else {
+              res.status(500).json({ success: false, message: '获取RSS失败，无法更新缓存' });
+            }
           } else {
             res.status(400).json({ success: false, message: '未知操作' });
           }
