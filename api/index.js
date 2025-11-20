@@ -1128,11 +1128,6 @@ module.exports = async (req, res) => {
         <div class="feature-title">安全防护</div>
         <div class="feature-desc">频率限制+黑名单</div>
       </div>
-      <div class="feature">
-        <div class="feature-icon">💎</div>
-        <div class="feature-title">完全免费</div>
-        <div class="feature-desc">零成本部署运行</div>
-      </div>
     </div>
 
     <div class="usage">
