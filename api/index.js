@@ -20,6 +20,10 @@ if (PASSWORD) {
   console.log('[管理后台] ⚠️  未配置PASSWORD环境变量，管理后台将无法访问');
 }
 
+// 管理后台 Token 存储（token -> 过期时间）
+const adminTokens = new Map(); // token -> expiresAt
+const TOKEN_TTL = 60 * 60 * 1000; // Token有效期：1小时
+
 // 频率限制配置
 const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 60; // 每分钟请求限制，默认60
 const BAN_DURATION = 5 * 60 * 1000; // 封禁时长：5分钟
@@ -41,6 +45,63 @@ const bannedIPs = new Map(); // ip -> bannedUntil (timestamp)
 function getUrlHash(url) {
   return crypto.createHash('md5').update(url).digest('hex');
 }
+
+/**
+ * 生成管理后台访问 Token
+ */
+function generateAdminToken() {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = Date.now() + TOKEN_TTL;
+  adminTokens.set(token, expiresAt);
+  console.log(`[管理后台] 生成新 Token: ${token.substring(0, 8)}...，有效期至 ${new Date(expiresAt).toLocaleString('zh-CN')}`);
+  return token;
+}
+
+/**
+ * 验证管理后台 Token
+ */
+function verifyAdminToken(token) {
+  if (!token) {
+    return false;
+  }
+
+  const expiresAt = adminTokens.get(token);
+  if (!expiresAt) {
+    return false;
+  }
+
+  const now = Date.now();
+  if (expiresAt <= now) {
+    // Token 已过期，删除
+    adminTokens.delete(token);
+    console.log(`[管理后台] Token 已过期: ${token.substring(0, 8)}...`);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * 清理过期的 Token（定期调用）
+ */
+function cleanExpiredTokens() {
+  const now = Date.now();
+  let cleaned = 0;
+
+  for (const [token, expiresAt] of adminTokens.entries()) {
+    if (expiresAt <= now) {
+      adminTokens.delete(token);
+      cleaned++;
+    }
+  }
+
+  if (cleaned > 0) {
+    console.log(`[管理后台] 清理了 ${cleaned} 个过期 Token`);
+  }
+}
+
+// 每5分钟清理一次过期 Token
+setInterval(cleanExpiredTokens, 5 * 60 * 1000);
 
 /**
  * 从Gist加载访问记录
@@ -993,25 +1054,417 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // 管理后台
-    const password = url.searchParams.get('password');
+    // ========== 管理后台登录 ==========
+    if (url.pathname === '/admin/login' && req.method === 'POST') {
+      console.log('[管理后台] 收到登录请求');
 
-    if (password) {
-      // 验证密码
-      if (password !== PASSWORD) {
-        res.status(403).json({ error: '密码错误' });
+      if (!PASSWORD) {
+        res.status(500).json({ success: false, message: '未配置管理后台密码' });
         return;
       }
 
-      console.log(`[请求] 访问管理后台 - 方法: ${req.method}`);
+      const { password } = req.body || {};
+      if (!password) {
+        res.status(400).json({ success: false, message: '缺少密码参数' });
+        return;
+      }
 
-      // 处理POST请求（获取数据）
-      if (req.method === 'POST') {
-        console.log(`[管理后台] POST请求体:`, req.body);
-        try {
-          const data = req.body || {};
-          console.log(`[管理后台] 解析的数据:`, data);
-          console.log(`[管理后台] action:`, data.action);
+      if (password !== PASSWORD) {
+        console.log('[管理后台] 密码验证失败');
+        res.status(403).json({ success: false, message: '密码错误' });
+        return;
+      }
+
+      // 密码正确，生成 token
+      const token = generateAdminToken();
+      console.log('[管理后台] 登录成功');
+      res.status(200).json({ success: true, token });
+      return;
+    }
+
+    // ========== 管理后台页面 ==========
+    if (url.pathname === '/admin' && req.method === 'GET') {
+      const token = url.searchParams.get('token');
+
+      // 验证 token
+      if (!verifyAdminToken(token)) {
+        res.status(401).send(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>访问被拒绝 - RSSJumper</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 500px;
+      width: 100%;
+      padding: 40px;
+      text-align: center;
+    }
+    h1 { font-size: 2em; margin-bottom: 20px; color: #dc3545; }
+    p { color: #666; margin-bottom: 20px; }
+    a { display: inline-block; padding: 12px 30px; background: #667eea; color: white; text-decoration: none; border-radius: 8px; }
+    a:hover { background: #5568d3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚠️ 访问被拒绝</h1>
+    <p>Token 无效或已过期，请重新登录。</p>
+    <a href="/">返回首页</a>
+  </div>
+</body>
+</html>`);
+        return;
+      }
+
+      console.log(`[请求] 访问管理后台`);
+
+      // GET请求 - 返回管理后台页面
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 - RSSJumper</title>
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🛠️ RSSJumper 管理后台</h1>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <div>
+            <div class="stat-value" id="stat-access">-</div>
+            <div class="stat-label">今日访问总数</div>
+          </div>
+          <button onclick="resetAccessCount()" style="background: none; border: none; cursor: pointer; font-size: 1.5em; padding: 10px; color: #dc3545; transition: transform 0.2s;" title="清零访问记录" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">🔄</button>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-cache">-</div>
+        <div class="stat-label">缓存文件数</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('access-log')">📊 访问记录</button>
+        <button class="tab-btn" onclick="switchTab('cache-files')">💾 缓存文件</button>
+      </div>
+
+      <div id="access-log-tab" class="tab-content active">
+        <div id="access-log-table">
+          <div class="loading">正在加载...</div>
+        </div>
+      </div>
+
+      <div id="cache-files-tab" class="tab-content">
+        <div id="cache-files-table">
+          <div class="loading">正在加载...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    console.log('[管理后台前端] 脚本开始执行');
+    const token = new URLSearchParams(window.location.search).get('token');
+    console.log('[管理后台前端] Token参数:', token ? '已获取' : '未获取');
+
+    if (!token) {
+      alert('错误：缺少Token参数！请重新登录。');
+      window.location.href = '/';
+    }
+
+    // HTML属性转义函数
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Tab切换函数
+    function switchTab(tabName) {
+      // 移除所有active类
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      // 添加active类到当前tab
+      event.target.classList.add('active');
+      document.getElementById(tabName + '-tab').classList.add('active');
+    }
+
+    async function loadData() {
+      try {
+        console.log('[管理后台] 开始加载数据...');
+        const response = await fetch('/admin/api?token=' + encodeURIComponent(token), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getData' })
+        });
+
+        console.log('[管理后台] 响应状态:', response.status);
+
+        if (response.status === 401) {
+          alert('Token已过期，请重新登录');
+          window.location.href = '/';
+          return;
+        }
+
+        const data = await response.json();
+        console.log('[管理后台] 接收到数据:', data);
+
+        if (!data.success) {
+          console.error('[管理后台] 数据加载失败:', data.message);
+          alert('加载数据失败: ' + data.message);
+          return;
+        }
+
+        // 更新统计
+        const totalTodayAccess = data.logs.reduce((sum, log) => sum + log.count, 0);
+        document.getElementById('stat-access').textContent = totalTodayAccess;
+        document.getElementById('stat-cache').textContent = data.stats.totalCached;
+
+        // 更新访问记录表格
+        const accessLogHtml = data.logs.length > 0 ?
+          '<table><thead><tr><th>RSS URL</th><th>今日访问次数</th><th>首次访问</th><th>最后访问</th><th>操作</th></tr></thead><tbody>' +
+          data.logs.map((log, idx) => {
+            const escapedUrl = escapeHtml(log.url);
+            return '<tr>' +
+              '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
+              '<td>' + log.count + '</td>' +
+              '<td>' + log.firstAccess + '</td>' +
+              '<td>' + log.lastAccess + '</td>' +
+              '<td>' +
+                (log.blacklisted ?
+                  '<button class="action-btn unblock-btn" id="log-btn-' + idx + '" onclick="toggleBlacklistByIndex(' + idx + ', false)">解绑</button>' :
+                  '<button class="action-btn block-btn" id="log-btn-' + idx + '" onclick="toggleBlacklistByIndex(' + idx + ', true)">加黑</button>') +
+              '</td>' +
+              '</tr>';
+          }).join('') +
+          '</tbody></table>' :
+          '<div class="loading">暂无访问记录</div>';
+
+        document.getElementById('access-log-table').innerHTML = accessLogHtml;
+        window.logsData = data.logs;
+
+        // 更新缓存文件表格
+        const cacheFilesHtml = data.cacheFiles.length > 0 ?
+          '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>缓存年龄</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+          data.cacheFiles.map((file, idx) => {
+            const escapedUrl = escapeHtml(file.url);
+
+            let statusButton = '';
+            switch(file.cacheStatus) {
+              case 'fresh':
+                statusButton = '<span class="action-btn" style="background: #28a745; cursor: default;">' + file.cacheStatusText + '</span>';
+                break;
+              case 'normal':
+                statusButton = '<button class="action-btn" style="background: #007bff;" onclick="refreshCacheByIndex(' + idx + ')">' + file.cacheStatusText + '</button>';
+                break;
+              case 'stale':
+                statusButton = '<button class="action-btn" style="background: #ffc107; color: #000;" onclick="refreshCacheByIndex(' + idx + ')">' + file.cacheStatusText + '</button>';
+                break;
+              case 'unavailable':
+                statusButton = '<button class="action-btn" style="background: #dc3545;" onclick="refreshCacheByIndex(' + idx + ')">' + file.cacheStatusText + '</button>';
+                break;
+              default:
+                statusButton = '<span class="action-btn" style="background: #6c757d;">' + file.cacheStatusText + '</span>';
+            }
+
+            return '<tr>' +
+              '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
+              '<td>' + (file.size / 1024).toFixed(2) + ' KB</td>' +
+              '<td>' + file.cachedAt + '</td>' +
+              '<td>' + file.age + '</td>' +
+              '<td>' + statusButton + '</td>' +
+              '<td>' +
+                '<button class="action-btn delete-btn" onclick="clearCacheByIndex(' + idx + ')">清除</button>' +
+              '</td>' +
+              '</tr>';
+          }).join('') +
+          '</tbody></table>' :
+          '<div class="loading">暂无缓存文件</div>';
+
+        document.getElementById('cache-files-table').innerHTML = cacheFilesHtml;
+        window.cacheFilesData = data.cacheFiles;
+
+        console.log('[管理后台] 数据加载完成');
+      } catch (error) {
+        console.error('[管理后台] 加载数据时出错:', error);
+        document.getElementById('access-log-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + error.message + '</div>';
+        document.getElementById('cache-files-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + error.message + '</div>';
+        alert('加载数据失败: ' + error.message);
+      }
+    }
+
+    // 通过索引切换黑名单状态
+    function toggleBlacklistByIndex(idx, addToBlacklist) {
+      if (!window.logsData || !window.logsData[idx]) {
+        alert('数据错误，请刷新页面');
+        return;
+      }
+      toggleBlacklist(window.logsData[idx].url, addToBlacklist);
+    }
+
+    // 切换黑名单状态
+    async function toggleBlacklist(url, addToBlacklist) {
+      try {
+        const action = addToBlacklist ? 'addBlacklist' : 'removeBlacklist';
+        const response = await fetch('/admin/api?token=' + encodeURIComponent(token), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, url })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert(result.message);
+          loadData();
+        } else {
+          alert('操作失败: ' + result.message);
+        }
+      } catch (error) {
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 清零访问记录
+    async function resetAccessCount() {
+      if (!confirm('确定要清零所有访问记录吗？此操作不可恢复！')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/admin/api?token=' + encodeURIComponent(token), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'resetAccessCount' })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert(result.message);
+          loadData();
+        } else {
+          alert('操作失败: ' + result.message);
+        }
+      } catch (error) {
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 通过索引刷新缓存
+    function refreshCacheByIndex(idx) {
+      if (!window.cacheFilesData || !window.cacheFilesData[idx]) {
+        alert('数据错误，请刷新页面');
+        return;
+      }
+      refreshCache(window.cacheFilesData[idx].url);
+    }
+
+    // 通过索引清除缓存
+    function clearCacheByIndex(idx) {
+      if (!window.cacheFilesData || !window.cacheFilesData[idx]) {
+        alert('数据错误，请刷新页面');
+        return;
+      }
+      clearCache(window.cacheFilesData[idx].url);
+    }
+
+    // 手动刷新缓存
+    async function refreshCache(url) {
+      if (!confirm('确定要手动拉取并更新这个URL的缓存吗？\\n\\n' + url)) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/admin/api?token=' + encodeURIComponent(token), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'refreshCache', url })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert('缓存更新成功！');
+          loadData();
+        } else {
+          alert('缓存更新失败: ' + (result.message || '未知错误'));
+        }
+      } catch (error) {
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 清除缓存
+    async function clearCache(url) {
+      if (!confirm('确定要清除这个URL的缓存吗？\\n\\n' + url)) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/admin/api?token=' + encodeURIComponent(token), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clearCache', url })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert('缓存已清除！');
+          loadData();
+        } else {
+          alert('清除缓存失败: ' + (result.message || '未知错误'));
+        }
+      } catch (error) {
+        alert('操作失败: ' + error.message);
+      }
+    }
+
+    // 页面加载时自动获取数据
+    loadData();
+
+    // 每30秒自动刷新
+    setInterval(loadData, 30000);
+  </script>
+</body>
+</html>`);
+      return;
+    }
+
+    // ========== 管理后台 API ==========
+    if (url.pathname === '/admin/api' && req.method === 'POST') {
+      const token = url.searchParams.get('token');
+
+      // 验证 token
+      if (!verifyAdminToken(token)) {
+        res.status(401).json({ success: false, message: 'Token无效或已过期' });
+        return;
+      }
+
+      console.log(`[管理后台API] 处理请求`);
+
+      try {
+        const data = req.body || {};
+        console.log(`[管理后台API] action: ${data.action}`);
 
           if (data.action === 'getData') {
             console.log(`[管理后台] 执行 getData 操作`);
@@ -1090,333 +1543,14 @@ module.exports = async (req, res) => {
           } else {
             res.status(400).json({ success: false, message: '未知操作' });
           }
-        } catch (error) {
-          console.error('[管理后台] POST请求处理错误:', error);
-          res.status(400).json({ success: false, message: '请求数据格式错误: ' + error.message });
-        }
-        return;
-      }
-
-      // GET请求 - 返回管理后台页面
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.status(200).send(`<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>管理后台 - RSSJumper</title>
-  <link rel="stylesheet" href="/css/admin.css">
-</head>
-<body>
-  <div class="container">
-    <h1>🛠️ RSSJumper 管理后台</h1>
-
-    <div class="stats">
-      <div class="stat-card">
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-          <div>
-            <div class="stat-value" id="stat-access">-</div>
-            <div class="stat-label">今日访问总数</div>
-          </div>
-          <button onclick="resetAccessCount()" style="background: none; border: none; cursor: pointer; font-size: 1.5em; padding: 10px; color: #dc3545; transition: transform 0.2s;" title="清零访问记录" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">🔄</button>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" id="stat-cache">-</div>
-        <div class="stat-label">缓存文件数</div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('access-log')">📊 访问记录</button>
-        <button class="tab-btn" onclick="switchTab('cache-files')">💾 缓存文件</button>
-      </div>
-
-      <div id="access-log-tab" class="tab-content active">
-        <div id="access-log-table">
-          <div class="loading">正在加载...</div>
-        </div>
-      </div>
-
-      <div id="cache-files-tab" class="tab-content">
-        <div id="cache-files-table">
-          <div class="loading">正在加载...</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    console.log('[管理后台前端] 脚本开始执行');
-    const password = new URLSearchParams(window.location.search).get('password');
-    console.log('[管理后台前端] 密码参数:', password ? '已获取' : '未获取');
-
-    if (!password) {
-      alert('错误：缺少密码参数！请通过正确的URL访问管理后台。');
-    }
-
-    // HTML属性转义函数
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    // Tab切换函数
-    function switchTab(tabName) {
-      // 移除所有active类
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-
-      // 添加active类到当前tab
-      event.target.classList.add('active');
-      document.getElementById(tabName + '-tab').classList.add('active');
-    }
-
-    async function loadData() {
-      try {
-        console.log('[管理后台] 开始加载数据...');
-        const response = await fetch('/?password=' + encodeURIComponent(password), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'getData' })
-        });
-
-        console.log('[管理后台] 响应状态:', response.status);
-        const data = await response.json();
-        console.log('[管理后台] 接收到数据:', data);
-
-        if (!data.success) {
-          console.error('[管理后台] 数据加载失败:', data.message);
-          alert('加载数据失败: ' + data.message);
-          return;
-        }
-
-        // 更新统计
-        // 计算今日访问总数（所有记录的今日访问次数之和）
-        const totalTodayAccess = data.logs.reduce((sum, log) => sum + log.count, 0);
-        document.getElementById('stat-access').textContent = totalTodayAccess;
-        document.getElementById('stat-cache').textContent = data.stats.totalCached;
-
-        // 更新访问记录表格
-        const accessLogHtml = data.logs.length > 0 ?
-          '<table><thead><tr><th>RSS URL</th><th>今日访问次数</th><th>首次访问</th><th>最后访问</th><th>操作</th></tr></thead><tbody>' +
-          data.logs.map((log, idx) => {
-            const escapedUrl = escapeHtml(log.url);
-            return '<tr>' +
-              '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
-              '<td>' + log.count + '</td>' +
-              '<td>' + log.firstAccess + '</td>' +
-              '<td>' + log.lastAccess + '</td>' +
-              '<td>' +
-                (log.blacklisted ?
-                  '<button class="action-btn unblock-btn" id="log-btn-' + idx + '" onclick="toggleBlacklistByIndex(' + idx + ', false)">解绑</button>' :
-                  '<button class="action-btn block-btn" id="log-btn-' + idx + '" onclick="toggleBlacklistByIndex(' + idx + ', true)">加黑</button>') +
-              '</td>' +
-              '</tr>';
-          }).join('') +
-          '</tbody></table>' :
-          '<div class="loading">暂无访问记录</div>';
-
-        document.getElementById('access-log-table').innerHTML = accessLogHtml;
-
-        // 保存日志数据供按钮使用
-        window.logsData = data.logs;
-
-        // 更新缓存文件表格
-        const cacheFilesHtml = data.cacheFiles.length > 0 ?
-          '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>缓存年龄</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
-          data.cacheFiles.map((file, idx) => {
-            const escapedUrl = escapeHtml(file.url);
-
-            // 生成四色状态按钮（样式与访问记录的操作按钮一致）
-            let statusButton = '';
-            switch(file.cacheStatus) {
-              case 'fresh':
-                // 新鲜 - 绿色，不可点击
-                statusButton = '<span class="action-btn" style="background: #28a745; cursor: default;">' + file.cacheStatusText + '</span>';
-                break;
-              case 'normal':
-                // 普通 - 蓝色，可点击
-                statusButton = '<button class="action-btn" style="background: #007bff;" onclick="refreshCacheByIndex(' + idx + ')">' + file.cacheStatusText + '</button>';
-                break;
-              case 'stale':
-                // 旧 - 黄色，可点击
-                statusButton = '<button class="action-btn" style="background: #ffc107; color: #000;" onclick="refreshCacheByIndex(' + idx + ')">' + file.cacheStatusText + '</button>';
-                break;
-              case 'unavailable':
-                // 失效 - 红色，可点击
-                statusButton = '<button class="action-btn" style="background: #dc3545;" onclick="refreshCacheByIndex(' + idx + ')">' + file.cacheStatusText + '</button>';
-                break;
-              default:
-                statusButton = '<span class="action-btn" style="background: #6c757d;">' + file.cacheStatusText + '</span>';
-            }
-
-            return '<tr>' +
-              '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
-              '<td>' + (file.size / 1024).toFixed(2) + ' KB</td>' +
-              '<td>' + file.cachedAt + '</td>' +
-              '<td>' + file.age + '</td>' +
-              '<td>' + statusButton + '</td>' +
-              '<td>' +
-                '<button class="action-btn delete-btn" onclick="clearCacheByIndex(' + idx + ')">清除</button>' +
-              '</td>' +
-              '</tr>';
-          }).join('') +
-          '</tbody></table>' :
-          '<div class="loading">暂无缓存文件</div>';
-
-        document.getElementById('cache-files-table').innerHTML = cacheFilesHtml;
-
-        // 保存缓存数据供按钮使用
-        window.cacheFilesData = data.cacheFiles;
-
-        console.log('[管理后台] 数据加载完成');
       } catch (error) {
-        console.error('[管理后台] 加载数据时出错:', error);
-        document.getElementById('access-log-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + error.message + '</div>';
-        document.getElementById('cache-files-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + error.message + '</div>';
-        alert('加载数据失败: ' + error.message);
+        console.error('[管理后台API] 处理错误:', error);
+        res.status(400).json({ success: false, message: '请求处理错误: ' + error.message });
       }
-    }
-
-    // 通过索引切换黑名单状态
-    function toggleBlacklistByIndex(idx, addToBlacklist) {
-      if (!window.logsData || !window.logsData[idx]) {
-        alert('数据错误，请刷新页面');
-        return;
-      }
-      toggleBlacklist(window.logsData[idx].url, addToBlacklist);
-    }
-
-    // 切换黑名单状态
-    async function toggleBlacklist(url, addToBlacklist) {
-      try {
-        const action = addToBlacklist ? 'addBlacklist' : 'removeBlacklist';
-        const response = await fetch('/?password=' + encodeURIComponent(password), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, url })
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          alert(result.message);
-          loadData(); // 刷新数据
-        } else {
-          alert('操作失败: ' + result.message);
-        }
-      } catch (error) {
-        alert('操作失败: ' + error.message);
-      }
-    }
-
-    // 清零访问记录
-    async function resetAccessCount() {
-      if (!confirm('确定要清零所有访问记录吗？此操作不可恢复！')) {
-        return;
-      }
-
-      try {
-        const response = await fetch('/?password=' + encodeURIComponent(password), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'resetAccessCount' })
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          alert(result.message);
-          loadData(); // 刷新数据
-        } else {
-          alert('操作失败: ' + result.message);
-        }
-      } catch (error) {
-        alert('操作失败: ' + error.message);
-      }
-    }
-
-    // 通过索引刷新缓存
-    function refreshCacheByIndex(idx) {
-      if (!window.cacheFilesData || !window.cacheFilesData[idx]) {
-        alert('数据错误，请刷新页面');
-        return;
-      }
-      refreshCache(window.cacheFilesData[idx].url);
-    }
-
-    // 通过索引清除缓存
-    function clearCacheByIndex(idx) {
-      if (!window.cacheFilesData || !window.cacheFilesData[idx]) {
-        alert('数据错误，请刷新页面');
-        return;
-      }
-      clearCache(window.cacheFilesData[idx].url);
-    }
-
-    // 手动刷新缓存（拉取最新内容）
-    async function refreshCache(url) {
-      if (!confirm('确定要手动拉取并更新这个URL的缓存吗？\\n\\n' + url)) {
-        return;
-      }
-
-      try {
-        const response = await fetch('/?password=' + encodeURIComponent(password), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'refreshCache', url })
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          alert('缓存更新成功！');
-          loadData(); // 刷新数据
-        } else {
-          alert('缓存更新失败: ' + (result.message || '未知错误'));
-        }
-      } catch (error) {
-        alert('操作失败: ' + error.message);
-      }
-    }
-
-    // 清除缓存
-    async function clearCache(url) {
-      if (!confirm('确定要清除这个URL的缓存吗？\\n\\n' + url)) {
-        return;
-      }
-
-      try {
-        const response = await fetch('/?password=' + encodeURIComponent(password), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'clearCache', url })
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          alert('缓存已清除！');
-          loadData(); // 刷新数据
-        } else {
-          alert('清除缓存失败: ' + (result.message || '未知错误'));
-        }
-      } catch (error) {
-        alert('操作失败: ' + error.message);
-      }
-    }
-
-    // 页面加载时自动获取数据
-    loadData();
-
-    // 每30秒自动刷新
-    setInterval(loadData, 30000);
-  </script>
-</body>
-</html>`);
       return;
     }
 
-    // 首页显示
+    // ========== 首页显示 ==========
     if (req.method !== 'GET') {
       res.status(405).json({ error: '首页只支持GET请求' });
       return;
@@ -1554,7 +1688,91 @@ module.exports = async (req, res) => {
     <div style="text-align: center; margin-top: 30px; color: #999; font-size: 0.9em;">
       <p>仅用于个人RSS订阅，请勿滥用</p>
     </div>
+
+    <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+      <button onclick="showAdminLogin()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 0.95em;">
+        🔒 管理后台
+      </button>
+    </div>
+
+    <!-- 管理后台登录弹窗 -->
+    <div id="adminLoginModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div style="background: white; border-radius: 15px; padding: 30px; max-width: 400px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+        <h2 style="margin: 0 0 20px 0; color: #333; font-size: 1.5em;">🔒 管理后台登录</h2>
+        <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
+          <input type="password" id="adminPassword" placeholder="请输入管理密码" required
+            style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1em; margin-bottom: 15px; box-sizing: border-box;">
+          <div style="display: flex; gap: 10px;">
+            <button type="button" onclick="hideAdminLogin()"
+              style="flex: 1; padding: 12px; background: #e0e0e0; color: #666; border: none; border-radius: 8px; cursor: pointer; font-size: 1em;">
+              取消
+            </button>
+            <button type="submit"
+              style="flex: 1; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1em;">
+              登录
+            </button>
+          </div>
+        </form>
+        <div id="loginError" style="display: none; margin-top: 15px; padding: 10px; background: #ffebee; color: #c62828; border-radius: 8px; font-size: 0.9em;"></div>
+      </div>
+    </div>
   </div>
+
+  <script>
+    function showAdminLogin() {
+      document.getElementById('adminLoginModal').style.display = 'flex';
+      document.getElementById('adminPassword').focus();
+    }
+
+    function hideAdminLogin() {
+      document.getElementById('adminLoginModal').style.display = 'none';
+      document.getElementById('adminPassword').value = '';
+      document.getElementById('loginError').style.display = 'none';
+    }
+
+    async function handleAdminLogin(event) {
+      event.preventDefault();
+
+      const password = document.getElementById('adminPassword').value;
+      const errorDiv = document.getElementById('loginError');
+
+      try {
+        const response = await fetch('/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+
+        const result = await response.json();
+
+        if (result.success && result.token) {
+          // 登录成功，跳转到管理后台
+          window.location.href = '/admin?token=' + encodeURIComponent(result.token);
+        } else {
+          // 登录失败
+          errorDiv.textContent = result.message || '登录失败，请重试';
+          errorDiv.style.display = 'block';
+        }
+      } catch (error) {
+        errorDiv.textContent = '网络错误：' + error.message;
+        errorDiv.style.display = 'block';
+      }
+    }
+
+    // ESC键关闭弹窗
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') {
+        hideAdminLogin();
+      }
+    });
+
+    // 点击背景关闭弹窗
+    document.getElementById('adminLoginModal').addEventListener('click', function(event) {
+      if (event.target === this) {
+        hideAdminLogin();
+      }
+    });
+  </script>
 </body>
 </html>`);
     return;
