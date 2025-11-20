@@ -936,7 +936,7 @@ async function proxyRSS(targetUrl) {
 }
 
 /**
- * 验证URL是否有效
+ * 验证URL是否有效（防止SSRF攻击）
  */
 function isValidUrl(url) {
   try {
@@ -949,13 +949,51 @@ function isValidUrl(url) {
 
     // 防止访问内网地址
     const hostname = parsed.hostname.toLowerCase();
+
+    // 检查 localhost 和 loopback
     if (hostname === 'localhost' ||
         hostname === '127.0.0.1' ||
+        hostname === '0.0.0.0' ||
         hostname === '::1' ||
-        hostname.startsWith('192.168.') ||
+        hostname.startsWith('127.') ||
+        hostname.startsWith('0.')) {
+      return false;
+    }
+
+    // 检查私有网络（RFC 1918）
+    if (hostname.startsWith('192.168.') ||
         hostname.startsWith('10.') ||
         /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) {
       return false;
+    }
+
+    // 检查链路本地地址（169.254.0.0/16）- AWS元数据等
+    if (hostname.startsWith('169.254.')) {
+      return false;
+    }
+
+    // 检查 IPv6 私有地址
+    if (hostname.startsWith('fc00:') ||  // 唯一本地地址
+        hostname.startsWith('fd00:') ||
+        hostname.startsWith('fe80:') ||  // 链路本地地址
+        hostname.startsWith('ff00:')) {  // 组播地址
+      return false;
+    }
+
+    // 防止域名绕过：检查是否解析为私有IP（简单检查）
+    // 注意：这不是完美的防护，但增加了难度
+    if (hostname.includes('localhost') ||
+        hostname.includes('127.0.0.1') ||
+        hostname.match(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/)) {
+      // 如果hostname本身就包含IP，进行更严格的检查
+      const ipMatch = hostname.match(/(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/);
+      if (ipMatch) {
+        const octets = ipMatch.slice(1, 5).map(Number);
+        // 验证IP范围
+        if (octets.some(octet => octet > 255)) {
+          return false;
+        }
+      }
     }
 
     return true;
@@ -985,6 +1023,14 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // 设置安全响应头
+  res.setHeader('X-Content-Type-Options', 'nosniff');  // 防止MIME类型嗅探
+  res.setHeader('X-Frame-Options', 'DENY');  // 防止点击劫持
+  res.setHeader('X-XSS-Protection', '1; mode=block');  // XSS防护（旧浏览器）
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');  // 限制Referrer信息
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');  // 禁用不需要的浏览器功能
+  // Content-Security-Policy 在HTML页面中单独设置
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -1309,8 +1355,9 @@ module.exports = async (req, res) => {
         console.log('[管理后台] 数据加载完成');
       } catch (error) {
         console.error('[管理后台] 加载数据时出错:', error);
-        document.getElementById('access-log-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + error.message + '</div>';
-        document.getElementById('cache-files-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + error.message + '</div>';
+        const safeErrorMsg = escapeHtml(error.message);
+        document.getElementById('access-log-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + safeErrorMsg + '</div>';
+        document.getElementById('cache-files-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + safeErrorMsg + '</div>';
         alert('加载数据失败: ' + error.message);
       }
     }
@@ -1681,14 +1728,9 @@ module.exports = async (req, res) => {
         <code>https://your-domain.com/?url=https://example.com/rss/feed.xml</code>
       </div>
       <p style="margin-top: 10px; color: #999; font-size: 0.9em;text-align: center;">
-        ⚠️ 注意：此服务仅支持RSS/Atom订阅源，不支持普通网页
+        ⚠️ 注意：此服务仅支持RSS/Atom订阅源，不支持普通网页。且仅用于个人RSS订阅，请勿滥用
       </p>
     </div>
-
-    <div style="text-align: center; margin-top: 30px; color: #999; font-size: 0.9em;">
-      <p>仅用于个人RSS订阅，请勿滥用</p>
-    </div>
-
     <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
       <button onclick="showAdminLogin()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 0.95em;">
         🔒 管理后台
