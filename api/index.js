@@ -59,7 +59,7 @@ async function loadAccessLog() {
         'Authorization': `token ${GITHUB_TOKEN}`,
         'Accept': 'application/vnd.github.v3+json'
       },
-      timeout: 5000
+      timeout: 15000
     });
 
     const file = response.data.files[ACCESS_LOG_FILE];
@@ -96,7 +96,7 @@ async function saveAccessLog() {
           'Authorization': `token ${GITHUB_TOKEN}`,
           'Accept': 'application/vnd.github.v3+json'
         },
-        timeout: 5000
+        timeout: 15000
       });
 
       const file = response.data.files[ACCESS_LOG_FILE];
@@ -142,7 +142,7 @@ async function saveAccessLog() {
           'Authorization': `token ${GITHUB_TOKEN}`,
           'Accept': 'application/vnd.github.v3+json'
         },
-        timeout: 5000
+        timeout: 15000
       }
     );
 
@@ -214,7 +214,7 @@ async function resetAccessLog() {
           'Authorization': `token ${GITHUB_TOKEN}`,
           'Accept': 'application/vnd.github.v3+json'
         },
-        timeout: 5000
+        timeout: 15000
       }
     );
 
@@ -239,7 +239,7 @@ async function getAccessLogFromGist() {
         'Authorization': `token ${GITHUB_TOKEN}`,
         'Accept': 'application/vnd.github.v3+json'
       },
-      timeout: 5000
+      timeout: 15000
     });
 
     const file = response.data.files[ACCESS_LOG_FILE];
@@ -280,7 +280,7 @@ async function loadBlacklist() {
         'Authorization': `token ${GITHUB_TOKEN}`,
         'Accept': 'application/vnd.github.v3+json'
       },
-      timeout: 5000
+      timeout: 15000
     });
 
     const file = response.data.files[BLACKLIST_FILE];
@@ -326,7 +326,7 @@ async function saveBlacklist() {
           'Authorization': `token ${GITHUB_TOKEN}`,
           'Accept': 'application/vnd.github.v3+json'
         },
-        timeout: 5000
+        timeout: 15000
       }
     );
 
@@ -371,7 +371,7 @@ async function loadBannedIPs() {
         'Authorization': `token ${GITHUB_TOKEN}`,
         'Accept': 'application/vnd.github.v3+json'
       },
-      timeout: 5000
+      timeout: 15000
     });
 
     const file = response.data.files[BANNED_IPS_FILE];
@@ -422,7 +422,7 @@ async function saveBannedIPs() {
           'Authorization': `token ${GITHUB_TOKEN}`,
           'Accept': 'application/vnd.github.v3+json'
         },
-        timeout: 5000
+        timeout: 15000
       }
     );
 
@@ -500,7 +500,7 @@ async function getCacheFilesList() {
         'Authorization': `token ${GITHUB_TOKEN}`,
         'Accept': 'application/vnd.github.v3+json'
       },
-      timeout: 5000
+      timeout: 15000
     });
 
     const cacheFiles = [];
@@ -589,7 +589,7 @@ async function readRSSCacheFromGist(targetUrl, allowExpired = false) {
         'Authorization': `token ${GITHUB_TOKEN}`,
         'Accept': 'application/vnd.github.v3+json'
       },
-      timeout: 5000
+      timeout: 15000
     });
 
     const file = response.data.files[cacheKey];
@@ -741,7 +741,7 @@ async function writeRSSCacheToGist(targetUrl, content, contentType) {
           'Authorization': `token ${GITHUB_TOKEN}`,
           'Accept': 'application/vnd.github.v3+json'
         },
-        timeout: 5000
+        timeout: 15000
       }
     );
 
@@ -777,7 +777,7 @@ async function deleteRSSCacheFromGist(targetUrl) {
           'Authorization': `token ${GITHUB_TOKEN}`,
           'Accept': 'application/vnd.github.v3+json'
         },
-        timeout: 5000
+        timeout: 15000
       }
     );
 
