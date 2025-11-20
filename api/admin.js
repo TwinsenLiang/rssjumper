@@ -171,39 +171,31 @@ function generateAdminHTML() {
           cacheBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无缓存文件</td></tr>';
         } else {
           cacheBody.innerHTML = data.cacheFiles.map(function(cache) {
-            // 四色状态按钮
+            // 四色状态按钮（样式与访问记录的操作按钮一致）
             var statusButton = '';
-            var statusClass = '';
             var statusText = cache.cacheStatusText;
             var isClickable = cache.cacheStatus !== 'fresh';
 
-            // 根据状态设置不同的颜色样式
+            // 根据状态设置不同的颜色样式（使用深色背景+白色文字，与访问记录按钮一致）
             switch(cache.cacheStatus) {
               case 'fresh':
                 // 新鲜 - 绿色，不可点击
-                statusClass = 'bg-green-100 text-green-800';
+                statusButton = '<span class="px-3 py-1 bg-green-500 text-white text-xs rounded">' + statusText + '</span>';
                 break;
               case 'normal':
                 // 普通 - 蓝色，可点击
-                statusClass = 'bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200';
+                statusButton = '<button onclick="refreshCache(' + "'" + encodeURIComponent(cache.url) + "'" + ')" class="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">' + statusText + '</button>';
                 break;
               case 'stale':
                 // 旧 - 黄色，可点击
-                statusClass = 'bg-yellow-100 text-yellow-800 cursor-pointer hover:bg-yellow-200';
+                statusButton = '<button onclick="refreshCache(' + "'" + encodeURIComponent(cache.url) + "'" + ')" class="px-3 py-1 bg-yellow-500 text-white text-xs rounded hover:bg-yellow-600">' + statusText + '</button>';
                 break;
               case 'unavailable':
                 // 失效 - 红色，可点击
-                statusClass = 'bg-red-100 text-red-800 cursor-pointer hover:bg-red-200';
+                statusButton = '<button onclick="refreshCache(' + "'" + encodeURIComponent(cache.url) + "'" + ')" class="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600">' + statusText + '</button>';
                 break;
               default:
-                statusClass = 'bg-gray-100 text-gray-800';
-            }
-
-            // 生成状态按钮
-            if (isClickable) {
-              statusButton = '<button onclick="refreshCache(' + "'" + encodeURIComponent(cache.url) + "'" + ')" class="px-2 py-1 text-xs font-medium rounded ' + statusClass + '">' + statusText + '</button>';
-            } else {
-              statusButton = '<span class="px-2 py-1 text-xs font-medium rounded ' + statusClass + '">' + statusText + '</span>';
+                statusButton = '<span class="px-3 py-1 bg-gray-500 text-white text-xs rounded">' + statusText + '</span>';
             }
 
             return '<tr class="hover:bg-gray-50">' +
