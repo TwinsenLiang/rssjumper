@@ -1161,15 +1161,19 @@ module.exports = async (req, res) => {
 
     async function loadData() {
       try {
+        console.log('[管理后台] 开始加载数据...');
         const response = await fetch('/?password=' + encodeURIComponent(password), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'getData' })
         });
 
+        console.log('[管理后台] 响应状态:', response.status);
         const data = await response.json();
+        console.log('[管理后台] 接收到数据:', data);
 
         if (!data.success) {
+          console.error('[管理后台] 数据加载失败:', data.message);
           alert('加载数据失败: ' + data.message);
           return;
         }
@@ -1185,6 +1189,7 @@ module.exports = async (req, res) => {
           '<table><thead><tr><th>RSS URL</th><th>今日访问次数</th><th>首次访问</th><th>最后访问</th><th>操作</th></tr></thead><tbody>' +
           data.logs.map(log => {
             const escapedUrl = escapeHtml(log.url);
+            const encodedUrl = encodeURIComponent(log.url);
             return '<tr>' +
               '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
               '<td>' + log.count + '</td>' +
@@ -1192,8 +1197,8 @@ module.exports = async (req, res) => {
               '<td>' + log.lastAccess + '</td>' +
               '<td>' +
                 (log.blacklisted ?
-                  '<button class="action-btn unblock-btn" data-url="' + escapedUrl + '" onclick="toggleBlacklist(this.dataset.url, false)">解绑</button>' :
-                  '<button class="action-btn block-btn" data-url="' + escapedUrl + '" onclick="toggleBlacklist(this.dataset.url, true)">加黑</button>') +
+                  '<button class="action-btn unblock-btn" onclick="toggleBlacklist(&quot;' + encodedUrl + '&quot;, false)">解绑</button>' :
+                  '<button class="action-btn block-btn" onclick="toggleBlacklist(&quot;' + encodedUrl + '&quot;, true)">加黑</button>') +
               '</td>' +
               '</tr>';
           }).join('') +
@@ -1248,7 +1253,11 @@ module.exports = async (req, res) => {
 
         document.getElementById('cache-files-table').innerHTML = cacheFilesHtml;
 
+        console.log('[管理后台] 数据加载完成');
       } catch (error) {
+        console.error('[管理后台] 加载数据时出错:', error);
+        document.getElementById('access-log-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + error.message + '</div>';
+        document.getElementById('cache-files-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + error.message + '</div>';
         alert('加载数据失败: ' + error.message);
       }
     }
