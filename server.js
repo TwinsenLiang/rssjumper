@@ -4,17 +4,16 @@ const querystring = require('querystring');
 const fs = require('fs');
 const path = require('path');
 
-// 导入Vercel serverless函数
+// 导入 API 处理函数
 const indexHandler = require('./api/index.js');
-const adminHandler = require('./api/admin.js');
 
 // 端口配置
 const PORT = process.env.PORT || 3000;
 
 /**
- * 包装Vercel函数为标准HTTP服务器
+ * 包装 API 函数为标准 HTTP 服务器中间件
  */
-function wrapVercelFunction(handler) {
+function wrapHandler(handler) {
   return async (req, res) => {
     // 解析URL和查询参数
     const parsedUrl = url.parse(req.url, true);
@@ -52,7 +51,7 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url);
   const pathname = parsedUrl.pathname;
 
-  // 添加必要的响应方法（兼容Vercel函数）
+  // 添加必要的响应方法
   if (!res.json) {
     res.json = function(data) {
       this.setHeader('Content-Type', 'application/json');
@@ -104,13 +103,8 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // 路由处理
-    if (pathname === '/api/admin' || pathname === '/admin') {
-      await wrapVercelFunction(adminHandler)(req, res);
-    } else {
-      // 默认路由到主处理函数
-      await wrapVercelFunction(indexHandler)(req, res);
-    }
+    // 所有请求路由到主处理函数
+    await wrapHandler(indexHandler)(req, res);
   } catch (error) {
     console.error('[服务器错误]', error);
     if (!res.headersSent) {
