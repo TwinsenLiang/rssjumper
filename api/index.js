@@ -1218,15 +1218,15 @@ module.exports = async (req, res) => {
                 break;
               case 'normal':
                 // 普通 - 蓝色，可点击
-                statusButton = '<button class="action-btn" style="background: #007bff;" onclick="refreshCache(\'' + encodedUrl + '\')">' + file.cacheStatusText + '</button>';
+                statusButton = '<button class="action-btn" style="background: #007bff;" onclick="refreshCache(&quot;' + encodedUrl + '&quot;)">' + file.cacheStatusText + '</button>';
                 break;
               case 'stale':
                 // 旧 - 黄色，可点击
-                statusButton = '<button class="action-btn" style="background: #ffc107; color: #000;" onclick="refreshCache(\'' + encodedUrl + '\')">' + file.cacheStatusText + '</button>';
+                statusButton = '<button class="action-btn" style="background: #ffc107; color: #000;" onclick="refreshCache(&quot;' + encodedUrl + '&quot;)">' + file.cacheStatusText + '</button>';
                 break;
               case 'unavailable':
                 // 失效 - 红色，可点击
-                statusButton = '<button class="action-btn" style="background: #dc3545;" onclick="refreshCache(\'' + encodedUrl + '\')">' + file.cacheStatusText + '</button>';
+                statusButton = '<button class="action-btn" style="background: #dc3545;" onclick="refreshCache(&quot;' + encodedUrl + '&quot;)">' + file.cacheStatusText + '</button>';
                 break;
               default:
                 statusButton = '<span class="action-btn" style="background: #6c757d;">' + file.cacheStatusText + '</span>';
@@ -1239,7 +1239,7 @@ module.exports = async (req, res) => {
               '<td>' + file.age + '</td>' +
               '<td>' + statusButton + '</td>' +
               '<td>' +
-                '<button class="action-btn delete-btn" onclick="clearCache(\'' + encodedUrl + '\')">清除</button>' +
+                '<button class="action-btn delete-btn" onclick="clearCache(&quot;' + encodedUrl + '&quot;)">清除</button>' +
               '</td>' +
               '</tr>';
           }).join('') +
