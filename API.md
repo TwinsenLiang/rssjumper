@@ -83,7 +83,7 @@ GET https://your-domain.vercel.app/
 **示例**:
 ```bash
 # 代理香港电台RSS
-curl "https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml"
+curl "https://your-domain.vercel.app/?url=https://github.blog/feed/"
 
 # 代理其他RSS源
 curl "https://your-domain.vercel.app/?url=https://example.com/feed.xml"
@@ -108,7 +108,7 @@ curl "https://your-domain.vercel.app/?url=https://example.com/feed.xml"
   "total": 10,
   "logs": [
     {
-      "url": "https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml",
+      "url": "https://github.blog/feed/",
       "date": "2025-11-19T00:30:15.234Z"
     },
     {
@@ -145,10 +145,10 @@ curl "https://your-domain.vercel.app/list?password=[你的密码]"
 
 ```
 原地址:
-https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
+https://github.blog/feed/
 
 代理地址:
-https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
+https://your-domain.vercel.app/?url=https://github.blog/feed/
 ```
 
 ### 场景2: 批量转换

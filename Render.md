@@ -257,19 +257,18 @@ https://rssjumper.onrender.com
 
 #### 测试2：测试RSS代理
 
-访问：
+访问（以GitHub Blog技术资讯为例）：
 ```
-https://rssjumper.onrender.com/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
+https://rssjumper.onrender.com/?url=https://github.blog/feed/
 ```
 
 应该能看到XML格式的RSS内容。
 
 #### 测试3：访问管理后台
 
-访问：
-```
-https://rssjumper.onrender.com/?password=你设置的密码
-```
+1. 访问首页：`https://rssjumper.onrender.com/`
+2. 点击页面底部的 **🔒 管理后台** 按钮
+3. 输入你设置的密码登录
 
 应该能看到管理后台界面。
 
@@ -433,7 +432,7 @@ git push
 https://rssjumper.onrender.com
 ```
 
-**在MagicMirror中使用：**
+**在MagicMirror中使用（技术资讯示例）：**
 ```javascript
 {
     module: "newsfeed",
@@ -441,10 +440,16 @@ https://rssjumper.onrender.com
     config: {
         feeds: [
             {
-                title: "新闻源",
-                url: "https://rssjumper.onrender.com/?url=原始RSS地址"
+                title: "GitHub Blog",
+                url: "https://rssjumper.onrender.com/?url=https://github.blog/feed/"
+            },
+            {
+                title: "Hacker News",
+                url: "https://rssjumper.onrender.com/?url=https://hnrss.org/frontpage"
             }
-        ]
+        ],
+        showSourceTitle: true,
+        showPublishDate: true
     }
 }
 ```

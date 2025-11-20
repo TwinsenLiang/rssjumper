@@ -104,7 +104,7 @@ vercel dev
 
 测试URL：
 - 首页：`http://localhost:3000/`
-- 代理：`http://localhost:3000/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml`
+- 代理：`http://localhost:3000/?url=https://github.blog/feed/`
 - 历史：`http://localhost:3000/?password=[你的密码]`
 
 ## 🎯 使用示例
@@ -127,7 +127,7 @@ https://your-domain.vercel.app/?password=[你的密码]
   "total": 3,
   "logs": [
     {
-      "url": "https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml",
+      "url": "https://github.blog/feed/",
       "date": "2025-11-19T00:30:00.000Z"
     }
   ]

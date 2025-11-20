@@ -2,7 +2,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 
 // 版本号
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 // GitHub Gist配置（用于缓存和访问记录）
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;

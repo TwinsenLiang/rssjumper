@@ -13,10 +13,10 @@
 **测试**：
 ```bash
 # 未编码URL
-curl "https://rssjumper.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_cfinance.xml"
+curl "https://rssjumper.vercel.app/?url=https://github.blog/feed/"
 
 # 编码URL（浏览器自动编码的格式）
-curl "https://rssjumper.vercel.app/?url=https%3A%2F%2Frthk9.rthk.hk%2Frthk%2Fnews%2Frss%2Fc_expressnews_cfinance.xml"
+curl "https://rssjumper.vercel.app/?url=https%3A%2F%2Fgithub.blog%2Ffeed%2F"
 ```
 
 ### 2. URL编码处理 ✓
@@ -148,7 +148,7 @@ bash test.sh https://rssjumper.vercel.app 你的密码
 ```
 
 ### 手动测试重点项
-1. RSS代理：访问 `/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_cfinance.xml`
+1. RSS代理：访问 `/?url=https://github.blog/feed/`
 2. 管理后台：访问 `/api/admin?password=你的密码`
 3. 黑名单：在管理后台禁用一个URL，然后访问该URL验证
 4. 缓存：首次访问查看 `X-RSSJumper-Cache: MISS`，再次访问查看 `HIT`
