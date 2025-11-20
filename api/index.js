@@ -515,6 +515,26 @@ async function getCacheFilesList() {
           const age = now - content.cachedAt;
           const expired = age > CACHE_TTL;
 
+          // 判断缓存状态
+          let cacheStatus = 'fresh';  // 默认新鲜
+          let cacheStatusText = '有效';
+
+          // 检查是否是"不可用"占位符（通过检查RSS内容）
+          const isUnavailable = content.content &&
+            (content.content.includes('RSS源暂时不可用') ||
+             content.content.includes('RSS已失效'));
+
+          if (isUnavailable) {
+            cacheStatus = 'unavailable';
+            cacheStatusText = 'RSS已失效';
+          } else if (expired) {
+            cacheStatus = 'stale';
+            cacheStatusText = '已过期但可用';
+          } else {
+            cacheStatus = 'fresh';
+            cacheStatusText = '新鲜';
+          }
+
           cacheFiles.push({
             filename,
             url: content.url,
@@ -523,6 +543,8 @@ async function getCacheFilesList() {
             expiresAt: new Date(content.expiresAt).toLocaleString('zh-CN'),
             age: Math.floor(age / 1000 / 60) + '分钟前',
             expired: expired,
+            cacheStatus: cacheStatus,
+            cacheStatusText: cacheStatusText,
             blacklisted: blacklist.has(content.url)
           });
         } catch (e) {
@@ -540,8 +562,11 @@ async function getCacheFilesList() {
 
 /**
  * 从Gist读取RSS缓存
+ * @param {string} targetUrl - RSS源URL
+ * @param {boolean} allowExpired - 是否允许返回过期的缓存（默认false）
+ * @returns {object|null} 缓存数据或null
  */
-async function readRSSCacheFromGist(targetUrl) {
+async function readRSSCacheFromGist(targetUrl, allowExpired = false) {
   if (!GITHUB_TOKEN || !GIST_ID) {
     console.log('[Gist缓存] 未配置GITHUB_TOKEN或GIST_ID，跳过');
     return null;
@@ -550,7 +575,7 @@ async function readRSSCacheFromGist(targetUrl) {
   const cacheKey = `rss-cache-${getUrlHash(targetUrl)}.json`;
 
   try {
-    console.log(`[Gist缓存] 尝试读取缓存: ${cacheKey}`);
+    console.log(`[Gist缓存] 尝试读取缓存: ${cacheKey}${allowExpired ? ' (允许过期)' : ''}`);
 
     const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
       headers: {
@@ -568,14 +593,25 @@ async function readRSSCacheFromGist(targetUrl) {
 
     const cache = JSON.parse(file.content);
     const now = Date.now();
+    const expired = !cache.expiresAt || cache.expiresAt <= now;
 
     // 检查是否过期
-    if (cache.expiresAt && cache.expiresAt > now) {
+    if (!expired) {
       console.log(`[Gist缓存] 命中！剩余时间: ${Math.round((cache.expiresAt - now) / 1000)}秒`);
       return {
         data: cache.content,
         contentType: cache.contentType || 'application/xml; charset=utf-8',
-        fromCache: true
+        fromCache: true,
+        expired: false
+      };
+    } else if (allowExpired) {
+      const age = Math.round((now - cache.cachedAt) / 1000 / 60);
+      console.log(`[Gist缓存] 返回过期缓存（已过期 ${age} 分钟）`);
+      return {
+        data: cache.content,
+        contentType: cache.contentType || 'application/xml; charset=utf-8',
+        fromCache: true,
+        expired: true
       };
     } else {
       console.log('[Gist缓存] 已过期');
@@ -585,6 +621,80 @@ async function readRSSCacheFromGist(targetUrl) {
     console.log(`[Gist缓存] 读取失败: ${error.message}`);
     return null;
   }
+}
+
+/**
+ * 生成"RSS已失效"的占位符RSS内容
+ * @param {string} targetUrl - RSS源URL
+ * @returns {string} RSS格式的占位符内容
+ */
+function generateUnavailableRSS(targetUrl) {
+  const now = new Date();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>RSS源暂时不可用</title>
+    <link>${targetUrl}</link>
+    <description>RSSJumper - RSS代理服务</description>
+    <lastBuildDate>${now.toUTCString()}</lastBuildDate>
+    <item>
+      <title>⚠️ ${targetUrl} 的RSS已失效</title>
+      <link>${targetUrl}</link>
+      <description>此RSS源暂时无法访问，已尝试多次获取但均失败。RSSJumper将继续尝试获取最新内容，请稍后再试。</description>
+      <pubDate>${now.toUTCString()}</pubDate>
+      <guid isPermaLink="false">rssjumper-unavailable-${Date.now()}</guid>
+    </item>
+  </channel>
+</rss>`;
+}
+
+/**
+ * 渐进式重试获取RSS（最多3次，超时时间递增：1秒、3秒、5秒）
+ * @param {string} targetUrl - RSS源URL
+ * @returns {object|null} 成功返回RSS数据，失败返回null
+ */
+async function fetchRSSWithRetry(targetUrl) {
+  const retryConfig = [
+    { attempt: 1, timeout: 1000 },  // 第1次：1秒超时
+    { attempt: 2, timeout: 3000 },  // 第2次：3秒超时
+    { attempt: 3, timeout: 5000 }   // 第3次：5秒超时
+  ];
+
+  for (const config of retryConfig) {
+    try {
+      console.log(`[RSS获取] 第 ${config.attempt} 次尝试，超时: ${config.timeout}ms`);
+
+      const response = await axios.get(targetUrl, {
+        timeout: config.timeout,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; RSSJumper/1.0)',
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+        },
+        maxRedirects: 5,
+        validateStatus: (status) => status >= 200 && status < 400,
+        responseType: 'text'
+      });
+
+      console.log(`[RSS获取] 第 ${config.attempt} 次成功！大小: ${response.data.length} 字节`);
+
+      return {
+        data: response.data,
+        contentType: response.headers['content-type'] || 'application/xml; charset=utf-8'
+      };
+    } catch (error) {
+      console.log(`[RSS获取] 第 ${config.attempt} 次失败: ${error.message}`);
+
+      // 如果是最后一次尝试，返回null
+      if (config.attempt === retryConfig.length) {
+        console.log(`[RSS获取] 所有尝试均失败`);
+        return null;
+      }
+
+      // 否则继续下一次尝试
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -635,80 +745,88 @@ async function writeRSSCacheToGist(targetUrl, content, contentType) {
 }
 
 /**
- * RSS代理函数
+ * RSS代理函数（优雅降级策略）
  * 功能：抓取RSS源并返回，支持Gist缓存和访问历史记录
+ *
+ * 策略：
+ * 1. 先尝试读取未过期的缓存，如果有就直接返回
+ * 2. 如果没有未过期的缓存，进行渐进式重试获取最新RSS（3次，1s/3s/5s超时）
+ * 3. 如果获取成功，写入缓存并返回
+ * 4. 如果获取失败，尝试读取过期的缓存，如果有就返回过期缓存
+ * 5. 如果连过期缓存都没有，生成"RSS已失效"的占位符并缓存，返回占位符
  */
 async function proxyRSS(targetUrl) {
   // 记录访问
   recordAccess(targetUrl);
 
-  // 先尝试从Gist读取缓存
-  const cachedResult = await readRSSCacheFromGist(targetUrl);
-  if (cachedResult) {
+  console.log(`[RSS代理] 开始处理: ${targetUrl}`);
+
+  // ========== 步骤1: 尝试读取未过期的缓存 ==========
+  const freshCache = await readRSSCacheFromGist(targetUrl, false);
+  if (freshCache && !freshCache.expired) {
+    console.log(`[RSS代理] 使用新鲜缓存`);
     return {
       success: true,
-      data: cachedResult.data,
-      contentType: cachedResult.contentType,
-      fromCache: true
+      data: freshCache.data,
+      contentType: freshCache.contentType,
+      fromCache: true,
+      cacheStatus: 'fresh'
     };
   }
-  try {
-    console.log(`[RSS代理] 开始抓取: ${targetUrl}`);
 
-    const response = await axios.get(targetUrl, {
-      timeout: 15000, // 15秒超时
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; RSSJumper/1.0)',
-        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
-      },
-      maxRedirects: 5,
-      validateStatus: (status) => status >= 200 && status < 400,
-      responseType: 'text'
-    });
+  // ========== 步骤2: 渐进式重试获取最新RSS ==========
+  console.log(`[RSS代理] 缓存已过期或不存在，开始获取最新RSS`);
+  const fetchResult = await fetchRSSWithRetry(targetUrl);
 
-    console.log(`[RSS代理] 抓取成功，大小: ${response.data.length} 字节`);
-
-    // 获取原始Content-Type
-    const originalContentType = response.headers['content-type'] || 'application/xml; charset=utf-8';
-    console.log(`[RSS代理] Content-Type: ${originalContentType}`);
+  if (fetchResult) {
+    // ========== 步骤3: 获取成功，写入缓存并返回 ==========
+    console.log(`[RSS代理] 成功获取最新RSS`);
 
     // 异步写入Gist缓存（不阻塞响应）
-    writeRSSCacheToGist(targetUrl, response.data, originalContentType).catch(err => {
+    writeRSSCacheToGist(targetUrl, fetchResult.data, fetchResult.contentType).catch(err => {
       console.log(`[Gist缓存] 异步写入失败: ${err.message}`);
     });
 
     return {
       success: true,
-      data: response.data,
-      contentType: originalContentType,
-      fromCache: false
-    };
-  } catch (error) {
-    console.error(`[RSS代理] 抓取失败:`, error.message);
-
-    // 返回RSS格式的错误信息
-    const errorRSS = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
-  <channel>
-    <title>RSSJumper - 错误提示</title>
-    <link>${targetUrl}</link>
-    <description>RSS代理服务</description>
-    <item>
-      <title>获取RSS失败</title>
-      <link>${targetUrl}</link>
-      <description>无法获取RSS源。错误: ${error.message}</description>
-      <pubDate>${new Date().toUTCString()}</pubDate>
-    </item>
-  </channel>
-</rss>`;
-
-    return {
-      success: false,
-      data: errorRSS,
-      contentType: 'application/xml; charset=utf-8',
-      error: error.message
+      data: fetchResult.data,
+      contentType: fetchResult.contentType,
+      fromCache: false,
+      cacheStatus: 'updated'
     };
   }
+
+  // ========== 步骤4: 获取失败，尝试读取过期缓存 ==========
+  console.log(`[RSS代理] 获取最新RSS失败，尝试使用过期缓存`);
+  const expiredCache = await readRSSCacheFromGist(targetUrl, true);
+
+  if (expiredCache) {
+    console.log(`[RSS代理] 使用过期缓存作为降级方案`);
+    return {
+      success: true,
+      data: expiredCache.data,
+      contentType: expiredCache.contentType,
+      fromCache: true,
+      cacheStatus: 'stale'
+    };
+  }
+
+  // ========== 步骤5: 无缓存可用，生成"RSS已失效"占位符 ==========
+  console.log(`[RSS代理] 无任何缓存可用，生成占位符RSS`);
+  const unavailableRSS = generateUnavailableRSS(targetUrl);
+
+  // 将占位符缓存起来（避免频繁重试）
+  writeRSSCacheToGist(targetUrl, unavailableRSS, 'application/xml; charset=utf-8').catch(err => {
+    console.log(`[Gist缓存] 异步写入占位符失败: ${err.message}`);
+  });
+
+  return {
+    success: false,
+    data: unavailableRSS,
+    contentType: 'application/xml; charset=utf-8',
+    fromCache: false,
+    cacheStatus: 'unavailable'
+  };
 }
 
 /**
@@ -822,6 +940,8 @@ module.exports = async (req, res) => {
       res.setHeader('X-RSSJumper-Version', VERSION);
       res.setHeader('X-RSSJumper-Status', result.success ? 'success' : 'error');
       res.setHeader('X-RSSJumper-Cache', result.fromCache ? 'HIT' : 'MISS');
+      // 缓存状态: fresh(新鲜), updated(已更新), stale(过期但可用), unavailable(不可用)
+      res.setHeader('X-RSSJumper-Cache-Status', result.cacheStatus || 'unknown');
 
       // 返回RSS内容
       res.status(200).send(result.data);
@@ -1010,13 +1130,16 @@ module.exports = async (req, res) => {
           '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>过期时间</th><th>状态</th></tr></thead><tbody>' +
           data.cacheFiles.map(file => {
             const escapedUrl = escapeHtml(file.url);
+            // 根据缓存状态显示不同颜色
+            // fresh: 绿色, stale: 橙色, unavailable: 红色
+            const statusClass = 'cache-status-' + file.cacheStatus;
             return '<tr>' +
               '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
               '<td>' + (file.size / 1024).toFixed(2) + ' KB</td>' +
               '<td>' + file.cachedAt + '</td>' +
               '<td>' + file.expiresAt + '</td>' +
-              '<td class="' + (file.expired ? 'expired' : 'valid') + '">' +
-                (file.expired ? '已过期' : '有效') +
+              '<td class="' + statusClass + '">' +
+                file.cacheStatusText +
               '</td>' +
               '</tr>';
           }).join('') +
