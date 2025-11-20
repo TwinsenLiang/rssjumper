@@ -1003,21 +1003,26 @@ module.exports = async (req, res) => {
         return;
       }
 
-      console.log(`[请求] 访问管理后台`);
+      console.log(`[请求] 访问管理后台 - 方法: ${req.method}`);
 
       // 处理POST请求（获取数据）
       if (req.method === 'POST') {
+        console.log(`[管理后台] POST请求体:`, req.body);
         try {
           const data = req.body || {};
+          console.log(`[管理后台] 解析的数据:`, data);
+          console.log(`[管理后台] action:`, data.action);
 
           if (data.action === 'getData') {
+            console.log(`[管理后台] 执行 getData 操作`);
+
             // 从Gist读取访问记录（而不是从内存Map读取）
             const logs = await getAccessLogFromGist();
 
             // 获取缓存列表
             const cacheFiles = await getCacheFilesList();
 
-            res.status(200).json({
+            const response = {
               success: true,
               logs,
               cacheFiles,
@@ -1025,7 +1030,11 @@ module.exports = async (req, res) => {
                 totalAccess: logs.length,
                 totalCached: cacheFiles.length
               }
-            });
+            };
+            console.log(`[管理后台] 返回数据 - logs: ${logs.length}, cacheFiles: ${cacheFiles.length}`);
+            res.status(200).json(response);
+            console.log(`[管理后台] 响应已发送`);
+            return;
           } else if (data.action === 'addBlacklist') {
             // 添加到黑名单
             if (!data.url) {
