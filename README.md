@@ -1,6 +1,17 @@
 # 🦘 RSSJumper - RSS代理服务
 
-一个轻量级的RSS订阅源代理服务，用于访问被阻挡的RSS订阅源。
+一个轻量级的RSS订阅源代理服务，专为MagicMirror智能镜显示技术资讯而设计。
+
+## ⚠️ 重要声明
+
+**本项目仅供开发者学习和获取互联网技术资讯使用，禁止用于其他用途。**
+
+- ✅ **适用场景**：MagicMirror等智能家居设备显示技术新闻（如GitHub Blog、Hacker News等）
+- ✅ **合法用途**：学习RSS代理技术、获取开发者技术资讯
+- ❌ **禁止用途**：访问新闻媒体、政治内容、侵犯版权内容
+- ⚖️ **免责声明**：使用本工具产生的任何法律责任由使用者自行承担
+
+**请遵守当地法律法规，仅用于技术学习和开发目的。**
 
 ## ✨ 功能特性
 
@@ -41,21 +52,47 @@
 
 ## 🚀 快速开始
 
+### 部署方式（推荐Render）
+
+**推荐方案：Render部署**
+- ✅ 免费750小时/月
+- ✅ 国内访问稳定
+- ✅ 持续运行服务
+- 📖 详细教程：[Render部署指南](./Render.md)
+
+**备选方案：Vercel部署**
+- ✅ Serverless架构
+- ✅ 全球CDN加速
+- ✅ 按需运行
+- 📖 详细教程：见下文[Vercel部署](#部署到vercel完全免费)
+
 ### 使用方法
 
 访问你的部署地址，并通过 `url` 参数传递RSS源：
 
-```
-https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
+```bash
+# Render部署示例（以GitHub Blog技术资讯为例）
+https://rssjumper.onrender.com/?url=https://github.blog/feed/
+
+# Vercel部署示例（以GitHub Blog技术资讯为例）
+https://rssjumper.vercel.app/?url=https://github.blog/feed/
 ```
 
 ### 管理后台
 
-使用密码参数访问管理后台，查看和管理RSS代理服务：
+访问管理后台需要通过安全的Token认证方式：
 
-```
-https://your-domain.vercel.app/?password=你的密码
-```
+**访问步骤：**
+1. 访问首页
+2. 点击页面底部的 **🔒 管理后台** 按钮
+3. 在弹出的登录框中输入密码
+4. 登录成功后自动跳转到管理后台页面
+
+**安全特性：**
+- ✅ 基于Token的身份验证（POST请求，非URL密码参数）
+- ✅ Token有效期1小时，自动过期
+- ✅ 自动清理过期Token，防止未授权访问
+- ✅ 密码通过环境变量配置，不暴露在代码中
 
 管理后台功能：
 
@@ -68,18 +105,23 @@ https://your-domain.vercel.app/?password=你的密码
 
 **缓存文件管理**
 - 查看所有缓存的RSS文件
-- 显示缓存文件大小、缓存时间、过期时间
-- 实时显示缓存状态（有效/已过期）
-- 自动清理过期缓存
+- 显示缓存文件大小、缓存时间、缓存年龄
+- 四色缓存状态系统：
+  - 🟢 新鲜（Fresh）：缓存在有效期内
+  - 🔵 普通（Normal）：缓存超过一半有效期，可点击刷新
+  - 🟡 旧（Stale）：缓存已过期但可用，可点击刷新
+  - 🔴 失效（Unavailable）：RSS源不可访问，可点击刷新重试
+- 手动刷新缓存：点击状态按钮立即拉取最新RSS内容
+- 一键清除缓存：删除指定RSS源的缓存文件
 
 **数据持久化**
 - 所有数据存储在GitHub Gist
-- 支持跨Vercel实例共享数据
+- 支持跨实例共享数据（Render/Vercel均可）
 - 访问历史自动累计，不会丢失
 
 ## 🌐 免费域名申请与绑定
 
-使用免费域名可以让你的RSS代理服务拥有更易记的访问地址，而不是使用Vercel默认的随机域名。以下是两个推荐的稳定免费域名服务。
+使用免费域名可以让你的RSS代理服务拥有更易记的访问地址，而不是使用平台默认域名（如`*.onrender.com`或`*.vercel.app`）。以下是两个推荐的稳定免费域名服务。
 
 ### 方案一：FreeDNS (afraid.org) - 推荐首选
 
@@ -147,56 +189,36 @@ DNS记录会自动生效，通常在几分钟内即可访问。
 
 **示例：** 文件名 `myrss.json` 将创建域名 `myrss.is-a.dev`
 
-### 在Vercel绑定自定义域名
+### 绑定自定义域名到部署平台
 
-完成上述任一免费域名申请后，需要在Vercel中绑定：
+完成上述任一免费域名申请后，需要在部署平台中绑定：
 
-#### 步骤1：获取Vercel项目域名
+#### 在Render绑定（推荐）
+
+详细步骤请参考：[Render部署指南 - 自定义域名](./Render.md#自定义域名可选)
+
+**简要步骤：**
+1. 在Render服务页面 → Settings → Custom Domain
+2. 添加你的域名（如 `myrss.mooo.com`）
+3. 在FreeDNS中配置CNAME指向 `rssjumper.onrender.com`
+4. 等待DNS生效（5-30分钟）
+5. Render自动配置HTTPS证书
+
+#### 在Vercel绑定（备选）
 
 1. 登录 [Vercel Dashboard](https://vercel.com/dashboard)
-2. 进入你的 `rssjumper` 项目
-3. 点击顶部 **Settings** → **Domains**
-4. 你会看到默认域名，类似：`rssjumper-xxxx.vercel.app`
+2. 进入项目 → Settings → Domains
+3. 添加你的域名（如 `myrss.mooo.com`）
+4. 在FreeDNS中配置CNAME指向 `cname.vercel-dns.com`
+5. 等待DNS生效
 
-#### 步骤2：添加自定义域名
-
-1. 在 **Domains** 页面，找到 **Add Domain** 输入框
-2. 输入你申请的免费域名，例如：
-   - `myrss.mooo.com` (FreeDNS)
-   - `myrss.is-a.dev` (is-a.dev)
-3. 点击 **Add**
-
-#### 步骤3：验证域名配置
-
-Vercel会显示DNS配置要求：
-
-**对于FreeDNS：**
-1. 回到 FreeDNS 网站
-2. 进入 **Subdomains** → 找到你的域名
-3. 点击 **Edit**
-4. 在 **Destination** 填写 `cname.vercel-dns.com`
-5. 保存更改
-
-**对于is-a.dev：**
-- 在你的PR中已经配置了CNAME，等待DNS生效即可
-
-#### 步骤4：等待DNS生效
-
-1. DNS传播通常需要 **5分钟 - 48小时**
-2. FreeDNS通常 **5-30分钟** 即可生效
-3. is-a.dev通常在PR合并后 **1-2小时** 生效
-
-#### 步骤5：验证绑定成功
-
-1. 在Vercel的 **Domains** 页面，你的域名旁边会显示 **✓ Valid Configuration**
-2. 访问你的自定义域名测试：
-
+**验证绑定成功：**
 ```bash
 # 测试访问
 https://myrss.mooo.com
 
-# 测试RSS代理
-https://myrss.mooo.com/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
+# 测试RSS代理（以GitHub Blog技术资讯为例）
+https://myrss.mooo.com/?url=https://github.blog/feed/
 ```
 
 ### 域名配置故障排查
@@ -235,7 +257,17 @@ https://myrss.mooo.com/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_cl
 3. **多个域名：** 可以同时绑定多个免费域名作为备份
 4. **邮箱验证：** 确保域名服务的注册邮箱始终有效
 
-## 📦 部署到Vercel（完全免费）
+## 📦 部署到Render（推荐方案）
+
+**详细部署指南请参考：[Render.md](./Render.md)**
+
+Render提供750小时/月的免费运行时间，国内访问稳定，适合长期运行的RSS代理服务。
+
+---
+
+## 📦 部署到Vercel（备选方案）
+
+Vercel提供Serverless架构，按需运行，全球CDN加速。以下是简要部署步骤：
 
 ### 前置要求
 
@@ -308,11 +340,11 @@ git push -u origin main
 # 访问首页（查看使用说明）
 https://your-domain.vercel.app/
 
-# 测试代理RSS
-https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml
+# 测试代理RSS（以GitHub Blog技术资讯为例）
+https://your-domain.vercel.app/?url=https://github.blog/feed/
 
-# 访问管理后台
-https://your-domain.vercel.app/?password=你的密码
+# 访问管理后台（点击首页的"管理后台"按钮，输入密码登录）
+https://your-domain.vercel.app/
 ```
 
 ## 🔧 本地开发测试（可选）
@@ -372,24 +404,26 @@ vercel dev
 
 ## ⚙️ 自定义配置
 
-### 修改访问密码
+### 配置管理后台密码
 
-**方法1：使用环境变量（推荐）**
+管理后台密码用于Token身份验证，必须通过环境变量配置。
 
-在Vercel项目设置中添加环境变量：
+**在Render配置（推荐）：**
+1. 进入Render Dashboard → 你的服务 → Environment
+2. 添加：`PASSWORD` = `你的强密码`
+3. 点击 Save Changes，服务自动重新部署
+
+**在Vercel配置（备选）：**
 1. 进入Vercel Dashboard → 你的项目 → Settings → Environment Variables
-2. 添加：`PASSWORD` = `你的新密码`
+2. 添加：`PASSWORD` = `你的强密码`
 3. 重新部署项目生效
 
-**方法2：直接修改代码**
+**重要提示：**
+- ⚠️ 未配置 `PASSWORD` 环境变量时，管理后台将无法访问
+- ✅ 密码用于生成访问Token（有效期1小时）
+- ✅ 不建议在代码中硬编码密码
 
-编辑 `api/index.js` 文件第9行：
-
-```javascript
-const PASSWORD = process.env.PASSWORD || '你的新密码'; // 请修改为您的密码
-```
-
-**本地测试环境变量配置**
+### 本地测试环境变量配置
 
 也可以复制 `.env.example` 为 `.env` 并修改（仅用于本地测试）：
 
@@ -403,28 +437,21 @@ cp .env.example .env
 
 **支持的环境变量列表：**
 
-**基础配置：**
-- `PASSWORD` - 管理后台访问密码（必需，未配置则无法访问管理后台）
-- `RATE_LIMIT` - 每分钟请求次数限制（默认：60）
-- `CACHE_TTL` - 缓存时长，单位毫秒（默认：900000，即15分钟）
+| 变量名 | 说明 | 默认值 | 必需 |
+|--------|------|--------|------|
+| `PASSWORD` | 管理后台Token认证密码 | 无 | ✅ 是 |
+| `GITHUB_TOKEN` | GitHub Personal Access Token (gist权限) | 无 | ✅ 是 |
+| `GIST_ID` | 存储数据的Gist ID | 无 | ✅ 是 |
+| `RATE_LIMIT` | 每分钟请求次数限制 | 60 | ❌ 否 |
+| `CACHE_TTL` | 缓存时长（毫秒） | 900000 (15分钟) | ❌ 否 |
 
-**GitHub Gist持久化存储（必需配置）：**
-- `GITHUB_TOKEN` - GitHub Personal Access Token（需要gist权限）
-- `GIST_ID` - 存储数据的Gist ID
+**GitHub Gist存储的数据：**
+- 访问记录（rssjumper-access-log.json）- 每日统计
+- 黑名单（rssjumper-blacklist.json）- 实时同步
+- 封禁IP列表（rssjumper-banned-ips.json）- 自动过期
+- RSS缓存文件（rss-cache-*.json）- 15分钟TTL
 
-RSSJumper使用GitHub Gist存储以下数据：
-- 访问记录（rssjumper-access-log.json）
-- 黑名单（rssjumper-blacklist.json）
-- 封禁IP列表（rssjumper-banned-ips.json）
-- RSS缓存文件（rss-cache-*.json）
-
-**配置说明：**
-1. 访问记录每日自动累计，记录每个RSS源的访问次数和时间
-2. 黑名单实时同步，禁用的URL立即生效
-3. 封禁IP自动过期，5分钟后自动解除
-4. 缓存文件15分钟过期，自动更新
-
-注意：`.env` 文件仅在本地开发时生效，Vercel部署需要在Dashboard中配置环境变量。
+注意：`.env` 文件仅在本地开发时生效，Render/Vercel部署需要在平台Dashboard中配置环境变量。
 
 ### 修改频率限制
 
@@ -566,12 +593,52 @@ Vercel免费计划（Hobby Plan）包括：
 }
 ```
 
+## 🪞 MagicMirror集成
+
+本项目专为MagicMirror智能镜设计，用于在镜面上显示技术资讯。
+
+### 配置示例
+
+在MagicMirror的`config/config.js`中配置newsfeed模块：
+
+```javascript
+{
+    module: "newsfeed",
+    position: "bottom_bar",
+    config: {
+        feeds: [
+            {
+                title: "GitHub Blog",
+                url: "https://rssjumper.onrender.com/?url=https://github.blog/feed/"
+            },
+            {
+                title: "Hacker News",
+                url: "https://rssjumper.onrender.com/?url=https://hnrss.org/frontpage"
+            }
+        ],
+        showSourceTitle: true,
+        showPublishDate: true,
+        broadcastNewsFeeds: true,
+        broadcastNewsUpdates: true
+    }
+}
+```
+
+### 推荐技术RSS源
+
+- **GitHub Blog**: `https://github.blog/feed/` - GitHub官方技术博客
+- **Hacker News**: `https://hnrss.org/frontpage` - 技术新闻聚合
+- **Dev.to**: `https://dev.to/feed` - 开发者社区
+- **CSS-Tricks**: `https://css-tricks.com/feed/` - 前端技术
+- **Smashing Magazine**: `https://www.smashingmagazine.com/feed/` - Web设计与开发
+
 ## 📝 使用限制
 
-1. 仅用于访问RSS订阅源
-2. 请遵守目标网站的robots.txt和使用条款
-3. 不要用于商业用途
-4. 不要分享给太多人使用（避免超出免费额度）
+1. ✅ **仅用于技术RSS源**：GitHub、Stack Overflow、开发者博客等技术内容
+2. ❌ **禁止访问新闻媒体**：不得用于政治新闻、时事报道等内容
+3. ⚖️ **遵守法律法规**：请遵守当地法律及目标网站的robots.txt和使用条款
+4. 🏠 **个人使用**：适合个人学习和家庭智能设备，不要分享给太多人使用
+5. 💰 **非商业用途**：仅供学习和个人使用，禁止商业化
 
 ## 📄 许可证
 

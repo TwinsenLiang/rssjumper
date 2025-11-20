@@ -1,13 +1,13 @@
 # RSSJumper 功能测试清单
 
 ## 1. RSS代理功能（核心功能）
-- [ ] 测试1: `/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_cfinance.xml`
+- [ ] 测试1: `/?url=https://github.blog/feed/`
   - 预期：返回XML格式的RSS内容
   - 检查：Content-Type: application/xml
   - 检查：X-RSSJumper-Cache: HIT或MISS
 
 - [ ] 测试2: URL参数编码测试
-  - 输入：`/?url=https%3A%2F%2Frthk9.rthk.hk%2Frthk%2Fnews%2Frss%2Fc_expressnews_cfinance.xml`
+  - 输入：`/?url=https%3A%2F%2Fgithub.blog%2Ffeed%2F`
   - 预期：自动解码并正常返回RSS
 
 - [ ] 测试3: 无效URL
