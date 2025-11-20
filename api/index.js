@@ -1148,7 +1148,13 @@ module.exports = async (req, res) => {
   </div>
 
   <script>
+    console.log('[管理后台前端] 脚本开始执行');
     const password = new URLSearchParams(window.location.search).get('password');
+    console.log('[管理后台前端] 密码参数:', password ? '已获取' : '未获取');
+
+    if (!password) {
+      alert('错误：缺少密码参数！请通过正确的URL访问管理后台。');
+    }
 
     // HTML属性转义函数
     function escapeHtml(text) {
