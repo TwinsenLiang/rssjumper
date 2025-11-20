@@ -1,6 +1,9 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
+// 版本号
+const VERSION = '1.0.0';
+
 // GitHub Gist配置（用于缓存和访问记录）
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GIST_ID = process.env.GIST_ID;
@@ -816,6 +819,7 @@ module.exports = async (req, res) => {
 
       // 设置响应头
       res.setHeader('Content-Type', result.contentType);
+      res.setHeader('X-RSSJumper-Version', VERSION);
       res.setHeader('X-RSSJumper-Status', result.success ? 'success' : 'error');
       res.setHeader('X-RSSJumper-Cache', result.fromCache ? 'HIT' : 'MISS');
 
