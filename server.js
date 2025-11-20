@@ -1,6 +1,8 @@
 const http = require('http');
 const url = require('url');
 const querystring = require('querystring');
+const fs = require('fs');
+const path = require('path');
 
 // 导入Vercel serverless函数
 const indexHandler = require('./api/index.js');
@@ -76,6 +78,32 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    // 静态文件处理
+    if (pathname.startsWith('/css/') || pathname.startsWith('/public/')) {
+      const filePath = pathname.startsWith('/css/')
+        ? path.join(__dirname, 'public', pathname)
+        : path.join(__dirname, pathname);
+
+      // 检查文件是否存在
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+        const ext = path.extname(filePath);
+        const contentType = {
+          '.css': 'text/css',
+          '.js': 'application/javascript',
+          '.html': 'text/html',
+          '.json': 'application/json',
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+          '.svg': 'image/svg+xml'
+        }[ext] || 'application/octet-stream';
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+    }
+
     // 路由处理
     if (pathname === '/api/admin' || pathname === '/admin') {
       await wrapVercelFunction(adminHandler)(req, res);
