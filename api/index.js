@@ -1187,9 +1187,8 @@ module.exports = async (req, res) => {
         // 更新访问记录表格
         const accessLogHtml = data.logs.length > 0 ?
           '<table><thead><tr><th>RSS URL</th><th>今日访问次数</th><th>首次访问</th><th>最后访问</th><th>操作</th></tr></thead><tbody>' +
-          data.logs.map(log => {
+          data.logs.map((log, idx) => {
             const escapedUrl = escapeHtml(log.url);
-            const encodedUrl = encodeURIComponent(log.url);
             return '<tr>' +
               '<td class="url-cell" title="' + escapedUrl + '">' + escapedUrl + '</td>' +
               '<td>' + log.count + '</td>' +
@@ -1197,8 +1196,8 @@ module.exports = async (req, res) => {
               '<td>' + log.lastAccess + '</td>' +
               '<td>' +
                 (log.blacklisted ?
-                  '<button class="action-btn unblock-btn" onclick="toggleBlacklist(&quot;' + encodedUrl + '&quot;, false)">解绑</button>' :
-                  '<button class="action-btn block-btn" onclick="toggleBlacklist(&quot;' + encodedUrl + '&quot;, true)">加黑</button>') +
+                  '<button class="action-btn unblock-btn" id="log-btn-' + idx + '" onclick="toggleBlacklistByIndex(' + idx + ', false)">解绑</button>' :
+                  '<button class="action-btn block-btn" id="log-btn-' + idx + '" onclick="toggleBlacklistByIndex(' + idx + ', true)">加黑</button>') +
               '</td>' +
               '</tr>';
           }).join('') +
@@ -1207,12 +1206,14 @@ module.exports = async (req, res) => {
 
         document.getElementById('access-log-table').innerHTML = accessLogHtml;
 
+        // 保存日志数据供按钮使用
+        window.logsData = data.logs;
+
         // 更新缓存文件表格
         const cacheFilesHtml = data.cacheFiles.length > 0 ?
           '<table><thead><tr><th>RSS URL</th><th>文件大小</th><th>缓存时间</th><th>缓存年龄</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
-          data.cacheFiles.map(file => {
+          data.cacheFiles.map((file, idx) => {
             const escapedUrl = escapeHtml(file.url);
-            const encodedUrl = encodeURIComponent(file.url);
 
             // 生成四色状态按钮（样式与访问记录的操作按钮一致）
             let statusButton = '';
@@ -1223,15 +1224,15 @@ module.exports = async (req, res) => {
                 break;
               case 'normal':
                 // 普通 - 蓝色，可点击
-                statusButton = '<button class="action-btn" style="background: #007bff;" onclick="refreshCache(&quot;' + encodedUrl + '&quot;)">' + file.cacheStatusText + '</button>';
+                statusButton = '<button class="action-btn" style="background: #007bff;" onclick="refreshCacheByIndex(' + idx + ')">' + file.cacheStatusText + '</button>';
                 break;
               case 'stale':
                 // 旧 - 黄色，可点击
-                statusButton = '<button class="action-btn" style="background: #ffc107; color: #000;" onclick="refreshCache(&quot;' + encodedUrl + '&quot;)">' + file.cacheStatusText + '</button>';
+                statusButton = '<button class="action-btn" style="background: #ffc107; color: #000;" onclick="refreshCacheByIndex(' + idx + ')">' + file.cacheStatusText + '</button>';
                 break;
               case 'unavailable':
                 // 失效 - 红色，可点击
-                statusButton = '<button class="action-btn" style="background: #dc3545;" onclick="refreshCache(&quot;' + encodedUrl + '&quot;)">' + file.cacheStatusText + '</button>';
+                statusButton = '<button class="action-btn" style="background: #dc3545;" onclick="refreshCacheByIndex(' + idx + ')">' + file.cacheStatusText + '</button>';
                 break;
               default:
                 statusButton = '<span class="action-btn" style="background: #6c757d;">' + file.cacheStatusText + '</span>';
@@ -1244,7 +1245,7 @@ module.exports = async (req, res) => {
               '<td>' + file.age + '</td>' +
               '<td>' + statusButton + '</td>' +
               '<td>' +
-                '<button class="action-btn delete-btn" onclick="clearCache(&quot;' + encodedUrl + '&quot;)">清除</button>' +
+                '<button class="action-btn delete-btn" onclick="clearCacheByIndex(' + idx + ')">清除</button>' +
               '</td>' +
               '</tr>';
           }).join('') +
@@ -1253,6 +1254,9 @@ module.exports = async (req, res) => {
 
         document.getElementById('cache-files-table').innerHTML = cacheFilesHtml;
 
+        // 保存缓存数据供按钮使用
+        window.cacheFilesData = data.cacheFiles;
+
         console.log('[管理后台] 数据加载完成');
       } catch (error) {
         console.error('[管理后台] 加载数据时出错:', error);
@@ -1260,6 +1264,15 @@ module.exports = async (req, res) => {
         document.getElementById('cache-files-table').innerHTML = '<div class="loading" style="color: red;">加载失败: ' + error.message + '</div>';
         alert('加载数据失败: ' + error.message);
       }
+    }
+
+    // 通过索引切换黑名单状态
+    function toggleBlacklistByIndex(idx, addToBlacklist) {
+      if (!window.logsData || !window.logsData[idx]) {
+        alert('数据错误，请刷新页面');
+        return;
+      }
+      toggleBlacklist(window.logsData[idx].url, addToBlacklist);
     }
 
     // 切换黑名单状态
@@ -1309,9 +1322,26 @@ module.exports = async (req, res) => {
       }
     }
 
+    // 通过索引刷新缓存
+    function refreshCacheByIndex(idx) {
+      if (!window.cacheFilesData || !window.cacheFilesData[idx]) {
+        alert('数据错误，请刷新页面');
+        return;
+      }
+      refreshCache(window.cacheFilesData[idx].url);
+    }
+
+    // 通过索引清除缓存
+    function clearCacheByIndex(idx) {
+      if (!window.cacheFilesData || !window.cacheFilesData[idx]) {
+        alert('数据错误，请刷新页面');
+        return;
+      }
+      clearCache(window.cacheFilesData[idx].url);
+    }
+
     // 手动刷新缓存（拉取最新内容）
-    async function refreshCache(encodedUrl) {
-      const url = decodeURIComponent(encodedUrl);
+    async function refreshCache(url) {
       if (!confirm('确定要手动拉取并更新这个URL的缓存吗？\n\n' + url)) {
         return;
       }
@@ -1336,8 +1366,7 @@ module.exports = async (req, res) => {
     }
 
     // 清除缓存
-    async function clearCache(encodedUrl) {
-      const url = decodeURIComponent(encodedUrl);
+    async function clearCache(url) {
       if (!confirm('确定要清除这个URL的缓存吗？\n\n' + url)) {
         return;
       }
