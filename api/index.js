@@ -1357,7 +1357,7 @@ module.exports = async (req, res) => {
 
     // 手动刷新缓存（拉取最新内容）
     async function refreshCache(url) {
-      if (!confirm('确定要手动拉取并更新这个URL的缓存吗？\n\n' + url)) {
+      if (!confirm('确定要手动拉取并更新这个URL的缓存吗？\\n\\n' + url)) {
         return;
       }
 
@@ -1382,7 +1382,7 @@ module.exports = async (req, res) => {
 
     // 清除缓存
     async function clearCache(url) {
-      if (!confirm('确定要清除这个URL的缓存吗？\n\n' + url)) {
+      if (!confirm('确定要清除这个URL的缓存吗？\\n\\n' + url)) {
         return;
       }
 
