@@ -17,18 +17,18 @@ if (PASSWORD) {
   console.log('[管理后台] ⚠️  未配置PASSWORD环境变量，管理后台将无法访问');
 }
 
-// 【第1步-C】频率限制配置
+// 频率限制配置
 const RATE_LIMIT = parseInt(process.env.RATE_LIMIT) || 60; // 每分钟请求限制，默认60
 const BAN_DURATION = 5 * 60 * 1000; // 封禁时长：5分钟
 console.log(`[频率限制] 每分钟限制: ${RATE_LIMIT} 次请求`);
 
-// 【第4步】访问记录存储（内存）
+// 访问记录存储（内存）
 const accessLog = new Map(); // url -> { count, firstAccess, lastAccess }
 
-// 【第1步-B】黑名单存储（内存）
+// 黑名单存储（内存）
 const blacklist = new Set(); // 黑名单URL集合
 
-// 【第1步-C】IP访问记录和封禁列表（内存）
+// IP访问记录和封禁列表（内存）
 const ipAccessLog = new Map(); // ip -> [timestamp1, timestamp2, ...]
 const bannedIPs = new Map(); // ip -> bannedUntil (timestamp)
 
@@ -40,7 +40,7 @@ function getUrlHash(url) {
 }
 
 /**
- * 【第4步】从Gist加载访问记录
+ * 从Gist加载访问记录
  */
 async function loadAccessLog() {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -75,7 +75,7 @@ async function loadAccessLog() {
 }
 
 /**
- * 【第4步】保存访问记录到Gist（立即异步保存，不阻塞响应）
+ * 保存访问记录到Gist（立即异步保存，不阻塞响应）
  */
 async function saveAccessLog() {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -85,7 +85,7 @@ async function saveAccessLog() {
   try {
     console.log('[访问记录] 保存到Gist...');
 
-    // 【修复】先从Gist读取现有数据，合并后再保存
+    // 先从Gist读取现有数据，合并后再保存
     let existingData = {};
     try {
       const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
@@ -150,7 +150,7 @@ async function saveAccessLog() {
 }
 
 /**
- * 【第4步】记录一次访问
+ * 记录一次访问
  */
 function recordAccess(url) {
   const now = Date.now();
@@ -183,7 +183,7 @@ function recordAccess(url) {
 }
 
 /**
- * 【第1步-A】从Gist读取访问记录（用于管理后台显示）
+ * 从Gist读取访问记录（用于管理后台显示）
  */
 async function getAccessLogFromGist() {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -212,7 +212,7 @@ async function getAccessLogFromGist() {
       count: (record.daily && record.daily[today]) || 0, // 今日访问次数
       firstAccess: new Date(record.firstAccess).toLocaleString('zh-CN'),
       lastAccess: new Date(record.lastAccess).toLocaleString('zh-CN'),
-      blacklisted: blacklist.has(url) // 【第1步-B】添加黑名单状态
+      blacklisted: blacklist.has(url)
     }));
   } catch (error) {
     console.log(`[管理后台] 读取访问记录失败: ${error.message}`);
@@ -221,7 +221,7 @@ async function getAccessLogFromGist() {
 }
 
 /**
- * 【第1步-B】从Gist加载黑名单
+ * 从Gist加载黑名单
  */
 async function loadBlacklist() {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -254,7 +254,7 @@ async function loadBlacklist() {
 }
 
 /**
- * 【第1步-B】保存黑名单到Gist
+ * 保存黑名单到Gist
  */
 async function saveBlacklist() {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -294,7 +294,7 @@ async function saveBlacklist() {
 }
 
 /**
- * 【第1步-B】添加URL到黑名单
+ * 添加URL到黑名单
  */
 async function addToBlacklist(url) {
   blacklist.add(url);
@@ -303,7 +303,7 @@ async function addToBlacklist(url) {
 }
 
 /**
- * 【第1步-B】从黑名单移除URL
+ * 从黑名单移除URL
  */
 async function removeFromBlacklist(url) {
   blacklist.delete(url);
@@ -312,7 +312,7 @@ async function removeFromBlacklist(url) {
 }
 
 /**
- * 【第1步-C】从Gist加载封禁IP列表
+ * 从Gist加载封禁IP列表
  */
 async function loadBannedIPs() {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -353,7 +353,7 @@ async function loadBannedIPs() {
 }
 
 /**
- * 【第1步-C】保存封禁IP到Gist
+ * 保存封禁IP到Gist
  */
 async function saveBannedIPs() {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -390,7 +390,7 @@ async function saveBannedIPs() {
 }
 
 /**
- * 【第1步-C】检查IP频率限制
+ * 检查IP频率限制
  * @returns {boolean} true表示通过，false表示被限制
  */
 function checkRateLimit(ip) {
@@ -444,7 +444,7 @@ function checkRateLimit(ip) {
 }
 
 /**
- * 【第1步-A】获取Gist中的所有缓存文件列表
+ * 获取Gist中的所有缓存文件列表
  */
 async function getCacheFilesList() {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -480,7 +480,7 @@ async function getCacheFilesList() {
             expiresAt: new Date(content.expiresAt).toLocaleString('zh-CN'),
             age: Math.floor(age / 1000 / 60) + '分钟前',
             expired: expired,
-            blacklisted: blacklist.has(content.url) // 【第1步-B】黑名单状态
+            blacklisted: blacklist.has(content.url)
           });
         } catch (e) {
           // 解析失败跳过
@@ -496,7 +496,7 @@ async function getCacheFilesList() {
 }
 
 /**
- * 【第3步】从Gist读取RSS缓存
+ * 从Gist读取RSS缓存
  */
 async function readRSSCacheFromGist(targetUrl) {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -531,7 +531,7 @@ async function readRSSCacheFromGist(targetUrl) {
       console.log(`[Gist缓存] 命中！剩余时间: ${Math.round((cache.expiresAt - now) / 1000)}秒`);
       return {
         data: cache.content,
-        contentType: cache.contentType || 'application/xml; charset=utf-8', // 使用保存的Content-Type
+        contentType: cache.contentType || 'application/xml; charset=utf-8',
         fromCache: true
       };
     } else {
@@ -545,7 +545,7 @@ async function readRSSCacheFromGist(targetUrl) {
 }
 
 /**
- * 【第3步】将RSS缓存写入Gist
+ * 将RSS缓存写入Gist
  */
 async function writeRSSCacheToGist(targetUrl, content, contentType) {
   if (!GITHUB_TOKEN || !GIST_ID) {
@@ -559,7 +559,7 @@ async function writeRSSCacheToGist(targetUrl, content, contentType) {
   const cacheData = {
     url: targetUrl,
     content: content,
-    contentType: contentType, // 保存原始Content-Type
+    contentType: contentType,
     cachedAt: now,
     expiresAt: now + CACHE_TTL
   };
@@ -592,22 +592,20 @@ async function writeRSSCacheToGist(targetUrl, content, contentType) {
 }
 
 /**
- * 【第1步】独立的RSS代理函数
- * 功能：抓取RSS源并返回，不受任何其他功能干扰
- * 【第3步】增强：支持Gist缓存
- * 【第4步】增强：记录访问历史
+ * RSS代理函数
+ * 功能：抓取RSS源并返回，支持Gist缓存和访问历史记录
  */
 async function proxyRSS(targetUrl) {
-  // 【第4步】记录访问
+  // 记录访问
   recordAccess(targetUrl);
 
-  // 【第3步】先尝试从Gist读取缓存
+  // 先尝试从Gist读取缓存
   const cachedResult = await readRSSCacheFromGist(targetUrl);
   if (cachedResult) {
     return {
       success: true,
       data: cachedResult.data,
-      contentType: cachedResult.contentType, // 使用缓存中保存的Content-Type
+      contentType: cachedResult.contentType,
       fromCache: true
     };
   }
@@ -623,16 +621,15 @@ async function proxyRSS(targetUrl) {
       maxRedirects: 5,
       validateStatus: (status) => status >= 200 && status < 400,
       responseType: 'text'
-      // 移除 responseEncoding，让axios自动处理编码，避免修改Content-Type
     });
 
     console.log(`[RSS代理] 抓取成功，大小: ${response.data.length} 字节`);
 
-    // 获取原始Content-Type（axios会将header名称转为小写）
+    // 获取原始Content-Type
     const originalContentType = response.headers['content-type'] || 'application/xml; charset=utf-8';
     console.log(`[RSS代理] Content-Type: ${originalContentType}`);
 
-    // 【第3步】异步写入Gist缓存（不阻塞响应）
+    // 异步写入Gist缓存（不阻塞响应）
     writeRSSCacheToGist(targetUrl, response.data, originalContentType).catch(err => {
       console.log(`[Gist缓存] 异步写入失败: ${err.message}`);
     });
@@ -700,23 +697,15 @@ function isValidUrl(url) {
   }
 }
 
-/**
- * 【第4步】启动时加载访问记录（异步，不阻塞）
- */
+// 启动时加载数据（异步，不阻塞）
 loadAccessLog().catch(err => {
   console.log(`[访问记录] 启动加载失败: ${err.message}`);
 });
 
-/**
- * 【第1步-B】启动时加载黑名单（异步，不阻塞）
- */
 loadBlacklist().catch(err => {
   console.log(`[黑名单] 启动加载失败: ${err.message}`);
 });
 
-/**
- * 【第1步-C】启动时加载封禁IP列表（异步，不阻塞）
- */
 loadBannedIPs().catch(err => {
   console.log(`[频率限制] 启动加载封禁IP失败: ${err.message}`);
 });
@@ -739,9 +728,7 @@ module.exports = async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const targetUrl = url.searchParams.get('url');
 
-    // ==========================================
-    // 【第1步】RSS代理功能 - 最高优先级
-    // ==========================================
+    // RSS代理功能
     if (targetUrl) {
       // RSS代理只接受GET请求
       if (req.method !== 'GET') {
@@ -751,7 +738,7 @@ module.exports = async (req, res) => {
 
       console.log(`[请求] RSS代理: ${targetUrl}`);
 
-      // 【第1步-C】获取客户端IP并检查频率限制
+      // 获取客户端IP并检查频率限制
       const clientIP = req.headers['x-forwarded-for']?.split(',')[0] ||
                       req.headers['x-real-ip'] ||
                       req.connection?.remoteAddress ||
@@ -774,7 +761,7 @@ module.exports = async (req, res) => {
         return;
       }
 
-      // 【第1步-B】检查黑名单
+      // 检查黑名单
       if (blacklist.has(targetUrl)) {
         console.log(`[黑名单] 拒绝访问: ${targetUrl}`);
         res.status(403).json({
@@ -790,7 +777,6 @@ module.exports = async (req, res) => {
       // 设置响应头
       res.setHeader('Content-Type', result.contentType);
       res.setHeader('X-RSSJumper-Status', result.success ? 'success' : 'error');
-      // 【第3步】添加缓存状态响应头
       res.setHeader('X-RSSJumper-Cache', result.fromCache ? 'HIT' : 'MISS');
 
       // 返回RSS内容
@@ -798,9 +784,7 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // ==========================================
-    // 【第1步-A】管理后台
-    // ==========================================
+    // 管理后台
     const password = url.searchParams.get('password');
 
     if (password) {
@@ -815,8 +799,6 @@ module.exports = async (req, res) => {
       // 处理POST请求（获取数据）
       if (req.method === 'POST') {
         try {
-          // 使用server.js已经解析好的req.body（Render环境）
-          // 或者读取请求流（Vercel环境）
           const data = req.body || {};
 
           if (data.action === 'getData') {
@@ -836,7 +818,7 @@ module.exports = async (req, res) => {
               }
             });
           } else if (data.action === 'addBlacklist') {
-            // 【第1步-B】添加到黑名单
+            // 添加到黑名单
             if (!data.url) {
               res.status(400).json({ success: false, message: '缺少URL参数' });
               return;
@@ -844,7 +826,7 @@ module.exports = async (req, res) => {
             await addToBlacklist(data.url);
             res.status(200).json({ success: true, message: '已添加到黑名单' });
           } else if (data.action === 'removeBlacklist') {
-            // 【第1步-B】从黑名单移除
+            // 从黑名单移除
             if (!data.url) {
               res.status(400).json({ success: false, message: '缺少URL参数' });
               return;
@@ -995,7 +977,7 @@ module.exports = async (req, res) => {
       }
     }
 
-    // 【第1步-B】切换黑名单状态
+    // 切换黑名单状态
     async function toggleBlacklist(url, addToBlacklist) {
       try {
         const action = addToBlacklist ? 'addBlacklist' : 'removeBlacklist';
@@ -1028,10 +1010,7 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // ==========================================
-    // 【第2步】首页显示
-    // ==========================================
-    // 首页只接受GET请求
+    // 首页显示
     if (req.method !== 'GET') {
       res.status(405).json({ error: '首页只支持GET请求' });
       return;
@@ -1135,24 +1114,24 @@ module.exports = async (req, res) => {
 
     <div class="features">
       <div class="feature">
-        <div class="feature-icon">🚀</div>
-        <div class="feature-title">快速代理</div>
-        <div class="feature-desc">即时访问RSS源</div>
-      </div>
-      <div class="feature">
-        <div class="feature-icon">🔒</div>
-        <div class="feature-title">安全限制</div>
-        <div class="feature-desc">2次/分钟/IP</div>
+        <div class="feature-icon">🎯</div>
+        <div class="feature-title">RSS代理</div>
+        <div class="feature-desc">突破限制访问订阅源</div>
       </div>
       <div class="feature">
         <div class="feature-icon">⚡</div>
         <div class="feature-title">智能缓存</div>
-        <div class="feature-desc">15分钟缓存</div>
+        <div class="feature-desc">15分钟快速响应</div>
       </div>
       <div class="feature">
-        <div class="feature-icon">📊</div>
-        <div class="feature-title">访问历史</div>
-        <div class="feature-desc">记录所有源</div>
+        <div class="feature-icon">🛡️</div>
+        <div class="feature-title">安全防护</div>
+        <div class="feature-desc">频率限制+黑名单</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💎</div>
+        <div class="feature-title">完全免费</div>
+        <div class="feature-desc">零成本部署运行</div>
       </div>
     </div>
 
@@ -1160,22 +1139,14 @@ module.exports = async (req, res) => {
       <h2>使用方法</h2>
       <div class="example">
         <strong>格式：</strong><br>
-        <code>https://your-domain.vercel.app/?url=RSS源地址</code>
+        <code>https://your-domain.com/?url=RSS源地址</code>
       </div>
       <div class="example">
         <strong>示例：</strong><br>
-        <code>https://your-domain.vercel.app/?url=https://rthk9.rthk.hk/rthk/news/rss/c_expressnews_clocal.xml</code>
+        <code>https://your-domain.com/?url=https://example.com/rss/feed.xml</code>
       </div>
-    </div>
-
-    <div class="usage">
-      <h2>🛠️ 管理后台</h2>
-      <div class="example">
-        <strong>访问地址：</strong><br>
-        <code>https://your-domain.vercel.app/?password=你的密码</code>
-      </div>
-      <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
-        密码需通过环境变量 <code>PASSWORD</code> 设置
+      <p style="margin-top: 10px; color: #999; font-size: 0.9em;">
+        ⚠️ 注意：此服务仅支持RSS/Atom订阅源，不支持普通网页
       </p>
     </div>
 
